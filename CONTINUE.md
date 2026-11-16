@@ -52,6 +52,17 @@ Feature branch `feature/m0-1-mi-textual-scope-001` created. Python GDB/MI parser
 
 **Test on SaltyPond:** restart QEMU in debug mode; pull branch, reinstall editable package if necessary, start dbg3k, step naturally from Reset_Handler to main and into foo/bar. Verify watches update when in scope and keyboard copy actions. Use `F2`, enter `info registers`, confirm output appears and `L` copies it. If Clipboard OSC52 fails, report terminal emulator and whether `wl-paste` gets data.
 
+
+### 2026-11-15: local watches confirmed; global watches added (CI-passed, Arch retest pending)
+
+**User confirmed:** the thread-qualified GDB/MI fix worked and local variables now populate the watches pane. **Remaining nit:** global variables, including the AN505 demo's `static volatile uint32_t total`, did not appear. This was a scope-coverage omission, not a regression in the frame-local code.
+
+**Implementation:** `src/dbg3k/globals.py` discovers DWARF global/file-static data via `-symbol-info-variables --max-results 65`. Externally linked symbols are labeled `global.name`; file-static symbols are labeled `file.c::name` and evaluated via quoted GDB file context `'file.c'::name`. The Textual scope tree gains a sibling `globals` group and the watch table includes both kinds of watches. Persistent globals reuse the same 128-stop numeric history and change glyphs; replies from earlier stops are discarded by token/stop tracking. A limit of 64 symbols bounds the initial remote-query workload.
+
+**Validation:** GitHub Actions unit tests, TUI import check and compileall passed at commit `bd9aeac`; further event-flow tests and docs are being added. Actual global value retrieval on Arch/QEMU remains unverified. Do not claim globals work on the target without a run receipt.
+
+**Known limitations:** first 64 enumerated debug globals, no pin/search or pagination; no continuously sampled watch values while running; optimized-out/unreadable symbols may show `<unavailable>`; GDB expression qualification on full source paths and nontrivial C++ globals needs real-target checks. Static source symbols absent from DWARF cannot be discovered.
+
 ## Resuming on the user's Arch Linux workstation
 
 ```sh
@@ -74,13 +85,14 @@ Terminal 2: `dbg3k examples/an505/firmware.elf`
 - [ ] Mouse wheel and PageUp/Down can reach beginning/end of file and do **not** advance PC.
 - [ ] Click function in call tree to view source without running firmware.
 - [ ] Step through startup loops and into `main()`, then `foo()` and `bar()` using `n/s/Space`; no automatic skip.
-- [ ] Verify explicit GDB thread-qualified requests succeed and locals populate watches once in scope, including `main.n`, `foo.n`, `bar.result`; histories update across stops.
+- [x] User confirmed that thread-qualified local watches now work.
+- [ ] Confirm `main.c::total` global in the new `globals` group from startup through `main`, `foo`, and `bar`, with value-change glyph and history.
 - [ ] If not, capture watch-pane error and GDB MI response to `-thread-info` and `-stack-list-variables --thread T --frame 0 --all-values`, GDB/Textual versions, PC and console log.
 - [ ] Verify y/Y/W/L copy commands, F2 input, paste and Enter, Escape to resume key stepping.
 
 ## Next engineering steps
 
-1. **Retest on SaltyPond** and collect real MI evidence for the missing watches if unresolved.
+1. **Retest global watches on SaltyPond**; capture GDB `-symbol-info-variables` / evaluated static `total` if unavailable. Retest local watches for regression.
 2. Add repeatable fake-GDB event-flow tests, including stale responses, and source-scroller navigation tests. Improve focus handling if tree consumes `j/k`.
 3. Add a separate source-function navigator (functions not currently executing), assembly/register pane and interactive GDB console, while retaining natural startup stepping.
 4. Measure static function `.text` sizes, then introduce a QEMU TCG guest-instruction histogram; preserve unknown/unattributed ranges.
@@ -90,8 +102,8 @@ Terminal 2: `dbg3k examples/an505/firmware.elf`
 
 **Verified:** User-confirmed original AN505 program boot; user-confirmed dbg3k TUI startup and source selection; Python parser/model unit tests and compileall in builder.
 
-**Patched but unverified on user's machine:** Source scrolling and MI watch diagnostics/command adjustment.
+**User confirmed:** frame-local watch query now succeeds. **Patched but unverified on user's machine:** globals and file-static watch discovery/evaluation; source scrolling and clipboard behavior.
 
-**Not implemented:** Function navigator, advanced console, actual per-function instruction profiling, frame-stack peak calculation, energy accounting, numeric stepping prefixes, robust invocation identities.
+**Not implemented:** Global watch selection/pinning, function navigator, actual per-function instruction profiling, frame-stack peak calculation, energy accounting, numeric stepping prefixes, robust invocation identities.
 
 **Do not regress:** Visible startup and handler source; separation of navigation and execution; accurate labels distinguishing measurement from estimate; GitHub + `CONTINUE.md` + JSON handoff continuity.
