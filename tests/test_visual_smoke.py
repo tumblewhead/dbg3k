@@ -35,8 +35,12 @@ class VisualSmokeTest(unittest.IsolatedAsyncioTestCase):
             tree = app.query_one("#scope", Tree)
             parent = app._stack_branch.children[0]
             self.assertIn("main(2)", str(parent.label))
+            # Completed returns now live under a stable historical caller
+            # branch, never under frames that can exit the current stack.
+            historical_caller = app._return_branch.children[0]
+            self.assertIn("main()", str(historical_caller.label))
             self.assertTrue(any("foo(2)" in str(child.label)
-                                for child in parent.children))
+                                for child in historical_caller.children))
             row = app.query_one(WatchRow)
             history_cell = row.query_one(".watch-history", Static)
             self.assertIn("stop 1: 2", str(history_cell.tooltip))
