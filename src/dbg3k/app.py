@@ -12,6 +12,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Footer, Header, Input, RichLog, Static, Tree
 
 from .commands import select_thread_id, locals_request
+from .globals import MAX_GLOBAL_WATCHES, GlobalSymbol, discover_globals
 
 from .backend import GdbTransport
 from .mi import Record
@@ -80,6 +81,12 @@ class DebuggerApp(App):
         self._watches_error = ''
         self._watch_results: dict[int, int] = {}
         self._active_thread: str | None = None
+        self._globals: list[GlobalSymbol] = []
+        self._globals_discovered = False
+        self._globals_truncated = False
+        self._globals_error = ''
+        self._global_result_stop: dict[int, int] = {}
+        self._global_last_requested_stop = -1
         self._connected = False
         self._log_lines: deque[str] = deque(maxlen=500)
 
@@ -118,10 +125,11 @@ class DebuggerApp(App):
         self._log_lines.append(line.rstrip())
         self.query_one('#console', RichLog).write(line.rstrip())
 
-    def _send(self, command: str, purpose: str, level: int | None = None) -> None:
+    def _send(self, command: str, purpose: str, level: int | None = None) -> int | None:
         try:
             token = self.transport.send(command)
             self.pending[token] = (purpose, level)
+            return token
         except (OSError, BrokenPipeError, AssertionError) as exc:
             self.status = 'ERROR'
             self._log(f'GDB send failed: {exc}')
@@ -162,11 +170,21 @@ class DebuggerApp(App):
         if record.kind != '^':
             return
         purpose, level = self.pending.pop(record.token, ('unknown', None))
+        global_result_stop = self._global_result_stop.pop(record.token, None)
         if record.cls == 'error':
             self._log(f'{purpose}: {record.payload.get("msg", "GDB error")}')
             if purpose == 'vars':
                 self._watches_error = str(record.payload.get('msg', 'GDB rejected locals request'))
                 self._show_watches()
+            if purpose == 'globals_discover':
+                self._globals_discovered = True
+                self._globals_error = str(record.payload.get('msg', 'GDB rejected global symbol query'))
+                self._show_watches()
+            if purpose == 'global_value' and level is not None and global_result_stop == self.model.stop:
+                symbol = self._globals[level]
+                self.model.set_global_value(symbol.key, symbol.label, symbol.name,
+                                            '<unavailable>', symbol.type_name)
+                self._finish_global_display()
             if purpose == 'execution':
                 self.status = 'HALTED'
                 self._show_status()
@@ -179,6 +197,8 @@ class DebuggerApp(App):
             self._connected = True
             self.status = 'HALTED'
             self._log(f'Connected to {self.remote}; ELF: {self.elf}')
+            self._send(f'-symbol-info-variables --max-results {MAX_GLOBAL_WATCHES + 1}',
+                       'globals_discover')
             self._send('-thread-info', 'thread_info')
         elif purpose == 'thread_info':
             self._active_thread = select_thread_id(record.payload) or self._active_thread
@@ -201,6 +221,19 @@ class DebuggerApp(App):
                 for frame in frames[:12]:
                     self._send(locals_request(self._active_thread, frame.level),
                                'vars', frame.level)
+            self._refresh_globals()
+        elif purpose == 'globals_discover':
+            self._globals, self._globals_truncated = discover_globals(record.payload)
+            self._globals_discovered = True
+            self._show_watches()
+            self._refresh_globals()
+        elif purpose == 'global_value' and level is not None:
+            if global_result_stop == self.model.stop:
+                symbol = self._globals[level]
+                self.model.set_global_value(
+                    symbol.key, symbol.label, symbol.name,
+                    str(record.payload.get('value', '<unavailable>')), symbol.type_name)
+                self._finish_global_display()
         elif purpose == 'vars' and level is not None:
             variables = record.payload.get('variables', [])
             if not isinstance(variables, list):
@@ -221,6 +254,27 @@ class DebuggerApp(App):
                 self._show_source()
         elif purpose == 'break_del':
             self._show_source()
+
+    def _refresh_globals(self) -> None:
+        """Evaluate the discovered data symbols once per debugger stop."""
+        stop = self.model.stop
+        if not self._globals_discovered or not self._globals or stop <= 0:
+            return
+        if self.status != 'HALTED' or self._global_last_requested_stop == stop:
+            return
+        self._global_last_requested_stop = stop
+        for index, symbol in enumerate(self._globals):
+            # Quote as a GDB/MI argument; the inner expression still uses
+            # GDB's 'file.c'::symbol disambiguation for static variables.
+            cmd = f'-data-evaluate-expression "{self._quoted(symbol.expression)}"'
+            token = self._send(cmd, 'global_value', index)
+            if token is not None:
+                self._global_result_stop[token] = stop
+
+    def _finish_global_display(self) -> None:
+        if not any(stop == self.model.stop for stop in self._global_result_stop.values()):
+            self._show_scope()
+            self._show_watches()
 
     def _refresh(self) -> None:
         self.model.begin_stop()
@@ -301,21 +355,32 @@ class DebuggerApp(App):
                 node.add_leaf(f'{watch.name} = {watch.value}' + (' ●' if watch.changed else ''))
             node.expand()
             parent = node
+        globals_now = sorted(self.model.active_globals(), key=lambda watch: watch.label)
+        global_node = tree.root.add(f'globals ({len(globals_now)})')
+        for watch in globals_now:
+            global_node.add_leaf(
+                f'{watch.label} = {watch.value}' + (' ●' if watch.changed else ''))
+        global_node.expand()
         tree.root.expand()
 
     def _show_watches(self) -> None:
-        table = Table(title='Watches · sampled at debugger stops', show_edge=False, box=None, expand=True)
+        table = Table(title='Watches · locals and globals · stop sampled', show_edge=False, box=None, expand=True)
         table.add_column('scope.local', style='#a5cdeb', no_wrap=True)
         table.add_column('Value', style='#dae7ee')
         table.add_column('Δ', justify='center')
         table.add_column('History', style='#79c8b6')
-        watches = sorted(self.model.active_watches(), key=lambda w: (w.frame_level, w.label))
+        watches = (sorted(self.model.active_globals(), key=lambda w: w.label)
+                   + sorted(self.model.active_watches(), key=lambda w: (w.frame_level, w.label)))
         for watch in watches:
             table.add_row(watch.label, watch.value, '●' if watch.changed else '', watch.trend)
         if self._watches_error:
             self.query_one('#watches', Static).update(
                 f'[GDB locals error] {self._watches_error}\nSee GDB output below.')
         elif watches:
+            if self._globals_error:
+                table.caption = f'Global discovery unavailable: {self._globals_error}'
+            elif self._globals_truncated:
+                table.caption = f'Globals limited to {MAX_GLOBAL_WATCHES}; selection planned'
             self.query_one('#watches', Static).update(table)
         elif not self._watch_results:
             self.query_one('#watches', Static).update('Loading locals from GDB…')
@@ -422,7 +487,8 @@ class DebuggerApp(App):
             self.notify('No source file available', severity='warning')
 
     def action_copy_watches(self) -> None:
-        watches = sorted(self.model.active_watches(), key=lambda w: (w.frame_level, w.label))
+        watches = (sorted(self.model.active_globals(), key=lambda w: w.label)
+                   + sorted(self.model.active_watches(), key=lambda w: (w.frame_level, w.label)))
         self._copy('\n'.join(f'{w.label}\t{w.value}\t{w.trend}' for w in watches),
                    'watch values')
 
