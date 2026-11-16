@@ -12,6 +12,7 @@ import socket
 import subprocess
 from tempfile import TemporaryDirectory
 import unittest
+from elftools.elf.elffile import ELFFile
 
 from dbg3k.app import DebuggerApp
 
@@ -75,10 +76,22 @@ __attribute__((noinline)) void checkpoint(void) { __asm volatile("nop"); }
 int main(void) { checkpoint(); state.negative = -9; checkpoint(); for(;;){} }
 ''')
             elf = Path(folder) / 'observations.elf'
+            # Older GNU linkers place an orphan build-ID note before .text,
+            # which makes AN505 reset load the note header as SP/PC. Keep real
+            # note provenance without moving the vector table off its base.
+            linker = Path(folder) / 'linker.ld'
+            linker.write_text((root / 'examples/an505/linker.ld').read_text().replace(
+                '    .data :', '    .note.gnu.build-id : { *(.note.gnu.build-id) } > FLASH\n    .data :'))
             subprocess.run(['arm-none-eabi-gcc', '-mcpu=cortex-m33', '-mthumb', '-O0', '-g3',
                 '-ffreestanding', '-fno-builtin', '-nostdlib', '-Wl,--build-id',
-                '-T', str(root / 'examples/an505/linker.ld'), str(root / 'examples/an505/startup.c'),
+                '-T', str(linker), str(root / 'examples/an505/startup.c'),
                 str(source), '-o', str(elf)], check=True, capture_output=True)
+            with elf.open('rb') as stream:
+                image = ELFFile(stream)
+                text = image.get_section_by_name('.text')
+                self.assertEqual(text['sh_addr'], 0x10000000)
+                self.assertEqual(int.from_bytes(text.data()[:4], 'little'), 0x38010000)
+                self.assertEqual(int.from_bytes(text.data()[4:8], 'little'), image['e_entry'])
             expressions = ['state', 'missing_symbol', 'state.large', 'huge', 'state.pointer',
                            '*state.pointer', 'bad', '*bad']
             async with self.debugger(elf, folder, expressions) as (app, ready):
