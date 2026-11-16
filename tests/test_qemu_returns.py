@@ -13,6 +13,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from dbg3k.app import DebuggerApp
+from dbg3k.resources import EnergyModel
 
 
 @unittest.skipUnless(os.environ.get('DBG3K_QEMU_TEST') == '1', 'opt-in real GDB/QEMU test')
@@ -29,17 +30,23 @@ class QemuReturnTests(unittest.IsolatedAsyncioTestCase):
             with socket.socket() as listener:
                 listener.bind(('127.0.0.1', 0))
                 port = listener.getsockname()[1]
+            plugin_args = []
+            if os.environ.get('DBG3K_QEMU_PLUGIN_TEST') == '1':
+                plugin = Path(os.environ.get('DBG3K_PLUGIN', root / 'plugins/libdbg3k-counts.so')).resolve()
+                plugin_args = ['-plugin', f'{plugin},out={folder}/counts.json,elf={elf}']
             qemu = subprocess.Popen([
                 'qemu-system-arm', '-M', 'mps2-an505', '-display', 'none',
                 '-serial', 'none', '-monitor', 'none', '-semihosting-config',
                 'enable=on,target=native', '-kernel', str(elf), '-S',
-                '-gdb', f'tcp:127.0.0.1:{port}'], stdout=subprocess.DEVNULL,
+                '-gdb', f'tcp:127.0.0.1:{port}', *plugin_args], stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE)
             try:
                 await asyncio.sleep(.2)
                 self.assertIsNone(qemu.poll())
                 app = DebuggerApp(str(elf), os.environ.get('DBG3K_GDB', 'gdb'),
-                                  f'127.0.0.1:{port}', history_dir=folder)
+                                  f'127.0.0.1:{port}', history_dir=folder,
+                                  instruction_profile=f'{folder}/counts.json' if plugin_args else None,
+                                  energy_model=EnergyModel(100, 2, 3.3))
                 async with app.run_test(size=(120, 40)) as pilot:
                     async def ready():
                         for _ in range(200):
@@ -53,6 +60,11 @@ class QemuReturnTests(unittest.IsolatedAsyncioTestCase):
                     app.action_continue_run()
                     await ready()
                     self.assertEqual(app.model.frames[0].function, 'bar')
+                    self.assertIsNotNone(app.stack_profile.sample)
+                    frames = app.stack_profile.sample['frames']
+                    self.assertEqual(frames[0]['function'], 'bar')
+                    self.assertIsNotNone(app.stack_profile.own_bytes(frames, 0))
+                    self.assertGreaterEqual(app.stack_profile.own_bytes(frames, 0), 0)
                     # No finish command: ordinary stepping must capture bar(2)=6.
                     for _ in range(12):
                         app.action_step()
@@ -88,9 +100,19 @@ class QemuReturnTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(series.count, 3)
                     self.assertEqual(series.last.value, '12')
                     records = [json.loads(line) for line in app._trace.path.read_text().splitlines()]
+                    self.assertTrue(all(record['schema'] == 'dbg3k.trace.v1' for record in records))
+                    self.assertEqual([r['seq'] for r in records], list(range(1, len(records) + 1)))
                     returns = [r for r in records if r['kind'] == 'return' and r['callee'] == 'bar']
                     self.assertEqual([r['value'] for r in returns], ['6', '9', '12'])
                     self.assertTrue(all(r['origin'] == 'gdb-python-finish-breakpoint' for r in returns))
+                    if plugin_args:
+                        await pilot.pause(.3)
+                        app._poll_instruction_profile()
+                        self.assertEqual(app._count_status, '')
+                        self.assertGreater(app.instruction_counts.total, 0)
+                        body = app.catalog.lookup(app.stack_profile.sample['frames'][0]['pc'])
+                        self.assertIsNotNone(body)
+                        self.assertGreater(body.size, 0)
             finally:
                 qemu.terminate()
                 qemu.communicate(timeout=5)

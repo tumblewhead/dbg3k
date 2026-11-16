@@ -21,8 +21,8 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Compile Python
         run: python -m compileall -q src tests
-  qemu-returns:
-    runs-on: ubuntu-latest
+  qemu-profiling:
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -31,11 +31,15 @@ jobs:
       - name: Install target debugger and emulator
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gdb-multiarch qemu-system-arm gcc-arm-none-eabi
+          sudo apt-get install -y --no-install-recommends gdb-multiarch qemu-system-arm gcc-arm-none-eabi libglib2.0-dev build-essential pkg-config
+          # Ubuntu 24.04 ships QEMU 8.2. Use its matching public plugin API.
+          curl --fail --location https://raw.githubusercontent.com/qemu/qemu/v8.2.2/include/qemu/qemu-plugin.h -o "$RUNNER_TEMP/qemu-plugin.h"
+          make -C plugins QEMU_INCLUDE="$RUNNER_TEMP"
           python -m pip install -e .
-      - name: Verify automatic returns through real GDB and QEMU
+      - name: Verify actual QEMU dispatch counts, stack observations and returns
         env:
           DBG3K_QEMU_TEST: '1'
           DBG3K_GDB: gdb-multiarch
+          DBG3K_QEMU_PLUGIN_TEST: '1'
           PYTHONPATH: src
-        run: python -m unittest discover -s tests -p test_qemu_returns.py -v
+        run: python -m unittest discover -s tests -p 'test_qemu*.py' -v

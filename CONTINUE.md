@@ -1,13 +1,56 @@
 # dbg3k: development history and continuation
 
 **Repository:** https://github.com/tumblewhead/dbg3k
-**Working branch:** `feature/selectable-debugger-views` (continues the owner-merged views branch)
-**Review:** https://github.com/tumblewhead/dbg3k/pull/4 (draft, against main; earlier PRs #2/#3 merged by owner)
-**Current stage:** Palette Left/Right toggles and automatic return capture during ordinary stepping; 43 local checks pass including real GDB/QEMU AN505.
+**Working branch:** `feature/stack-instruction-energy` (based on PR #4's branch)
+**Review:** New resource PR pending; PR #4 remains open for preceding return/palette changes.
+**Current stage:** Three resource panes, actual QEMU dispatch collector, sampled GDB stack estimates and explicit energy model; 48 local tests pass including real QEMU/GDB.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
+
+### 2026-11-16: stack, code/instruction and energy panes
+
+User chose a QEMU plugin as the instruction-count source. Added independently
+selectable Stack, Code & Instructions, and Energy panes following the selected
+active tree frame. Stack snapshots are versioned GDB Python messages containing
+available CPU/stack registers and unwound frames. Stop/thread freshness is
+checked. Own and inclusive active bytes are explicitly SP-delta estimates;
+sampled peaks aggregate by thread/body. Oldest/inline/exception boundaries and
+unavailable registers remain unknown. Frame count/recursion is separate from
+bytes; Kodama coroutine frame storage is not attributed as task stacks.
+
+`plugins/counts.c` counts per-instruction execution callbacks on single-vCPU QEMU
+system emulation, not translations. Atomic cumulative snapshots every ~100 ms
+carry run UUID, ELF SHA256, sequence, completion and overflow. PC counters are
+reused across translations, capped at 262144; overflow counts remain unknown.
+`resources.py` reads ELF executable STT_FUNC extents with pyelftools, folds exact
+aliases, and preserves ambiguous/unmapped PC counts. No inclusive/invocation or
+cycle claim. QEMU dispatch callbacks run before completion, so counts may include
+faulting instructions. Users restart QEMU with the collector and provide the
+snapshot path to `--instruction-profile`. Snapshot boundaries are not GDB stops.
+
+Energy model accepts explicit finite positive µA/MHz, MIPS/MHz and voltage through
+the palette or CLI. Their ratio is pC/instruction; multiplying by count and voltage
+gives estimated pJ. Power stays unavailable without target duration; peripheral,
+idle, leakage and memory effects are excluded. No chip defaults were fabricated.
+New trace kinds preserve the original envelope schema/sequence. `RESOURCES.md`
+contains the complete build/launch instructions and measurement contract.
+
+Validation: 48 tests pass with both real QEMU flags enabled. Assembly oracle:
+10-byte counted body, exactly 13 dispatches/call (26 for two calls); an uncalled
+4-byte body has zero dispatches. Mounted Textual/GDB/QEMU validates live stack,
+ELF mapping, plugin ingestion and retained returns. `make -C plugins` builds with
+warnings as errors using installed API7/QEMU11.1 headers; CI also builds API1 for
+Ubuntu24.04's QEMU8.2. Compileall and whitespace checks pass. See compact
+handoff/resource-validation.json. PyPI DNS was sandbox-blocked; approved venv
+installation of pyelftools0.33 succeeded. The matching QEMU header was already
+installed; no downloaded header was needed locally. Physical silicon, interrupt
+stack precision, latest Kodama profiling and terminal ergonomics remain pending.
+
+Next: check new PR CI, launch QEMU with the collector following RESOURCES.md,
+choose the resource panes and select active tree frames. Enter actual chip
+assumptions in Energy model; compare unknown counts and sampled stack peaks.
 
 ### 2026-11-15: normal stepping returns and palette arrow toggles
 

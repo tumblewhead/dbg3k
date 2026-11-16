@@ -6,6 +6,9 @@ from collections import deque
 from functools import partial
 from collections.abc import Iterable
 import queue
+import json
+import time
+from elftools.common.exceptions import ELFError
 from rich.text import Text
 from textual.app import App, ComposeResult, SystemCommand
 from textual.binding import Binding
@@ -23,7 +26,9 @@ from .calltree import ReturnKey, ReturnLedger, ReturnObservation, display_call, 
 from .scope_ui import ScopeTree
 from .trace import TraceWriter
 from .watch_ui import WatchRow
-from .views import VIEWS, ViewsScreen, ViewCommandPalette
+from .views import VIEWS, ViewsScreen, ViewCommandPalette, EnergyScreen
+from .resources import CodeCatalog, StackProfile, InstructionProfile, EnergyModel, decode_stack
+from .resource_ui import resource_text
 
 class DebuggerApp(App):
     TITLE = 'dbg3k'
@@ -54,6 +59,10 @@ class DebuggerApp(App):
     #watch_status, #global_status { height: auto; max-height: 3; color: $text-muted; }
     #watch_scroll, #global_scroll { height: 1fr; background: $surface; }
     #watch_rows, #global_rows { height: auto; background: $surface; }
+    .resource-panel { height: 1fr; min-height: 10; border: round $border;
+        background: $surface; padding: 0 1; }
+    .resource-title { height: 1; text-style: bold; color: $text-primary; }
+    .resource-content { height: auto; }
     WatchRow {
         height: 1; width: 100%; background: $surface;
         color: $foreground;
@@ -100,10 +109,25 @@ class DebuggerApp(App):
     ]
 
     def __init__(self, elf: str, gdb: str, remote: str,
-                 history_dir: str = "dbg3k-history") -> None:
+                 history_dir: str = "dbg3k-history", instruction_profile: str | None = None,
+                 energy_model: EnergyModel | None = None) -> None:
         super().__init__()
         self.elf, self.remote = elf, remote
         self.history_dir = history_dir
+        self.instruction_path = Path(instruction_profile).expanduser() if instruction_profile else None
+        self.energy_model = energy_model
+        self.stack_profile = StackProfile()
+        self.instruction_counts = InstructionProfile()
+        self._stack_ready = False
+        self._stack_error = ''
+        self._resource_poll_time = 0.0
+        self._count_status = 'Start QEMU with the counts plugin and pass --instruction-profile PATH.'
+        try:
+            self.catalog = CodeCatalog(elf)
+            self._catalog_error = ''
+        except (OSError, ValueError, ELFError) as exc:
+            self.catalog = None
+            self._catalog_error = str(exc)
         self._trace: TraceWriter | None = None
         self._trace_error_reported = False
         self._returns = ReturnLedger()
@@ -161,6 +185,12 @@ class DebuggerApp(App):
                     yield Static('Globals appear when GDB stops.', id='global_status')
                     with VerticalScroll(id='global_scroll'):
                         yield Vertical(id='global_rows')
+                for key, title in [('stack', 'STACK FRAMES & STACK WATCH'),
+                                   ('instruction', 'CODE & INSTRUCTIONS'), ('energy', 'ENERGY ESTIMATE')]:
+                    with VerticalScroll(id=f'{key}_panel', classes='resource-panel'):
+                        yield Static(title, classes='resource-title')
+                        yield Static('Waiting for resource observations…', id=f'{key}_content',
+                                     classes='resource-content', markup=False)
         yield Static('s:into  n:next  i:instruction  Space:repeat  Ctrl+P:views', id='stepbar')
         with Vertical(id='console_panel'):
             yield RichLog(id='console', highlight=True, markup=False)
@@ -171,6 +201,8 @@ class DebuggerApp(App):
         yield from super().get_system_commands(screen)
         yield SystemCommand('Views', 'Choose visible panes with checkboxes',
                             self.action_choose_views)
+        yield SystemCommand('Energy model', 'Configure µA/MHz, MIPS/MHz and voltage assumptions',
+                            lambda: self.push_screen(EnergyScreen()))
         for key, (label, _) in VIEWS.items():
             enabled = key in self.visible_views
             yield SystemCommand(
@@ -195,7 +227,7 @@ class DebuggerApp(App):
         for key, (_, selector) in VIEWS.items():
             base.query_one(selector).display = key in self.visible_views
         source = 'source' in self.visible_views
-        right = bool(self.visible_views & {'tree', 'immediate', 'globals'})
+        right = bool(self.visible_views & {'tree', 'immediate', 'globals', 'stack', 'instructions', 'energy'})
         base.query_one('#left').display = source
         base.query_one('#right').display = right
         base.query_one('#left').styles.width = '63%' if right else '100%'
@@ -204,6 +236,7 @@ class DebuggerApp(App):
 
     def on_mount(self) -> None:
         self.query_one('#scope', ScopeTree).return_tooltip = self._return_tooltip
+        self._show_resources()
         try:
             self.transport.start()
             self._send(f'-file-exec-and-symbols "{self._quoted(self.elf)}"', 'load')
@@ -306,10 +339,69 @@ class DebuggerApp(App):
             self._rendered_theme = self.theme
             self._show_source()
             self._show_watches()
+        if time.monotonic() - self._resource_poll_time >= .25:
+            self._resource_poll_time = time.monotonic()
+            self._poll_instruction_profile()
+
+    def set_energy_model(self, model: EnergyModel) -> None:
+        self.energy_model = model
+        self._trace_record('energy_model', ua_per_mhz=model.ua_per_mhz,
+                           mips_per_mhz=model.mips_per_mhz, voltage=model.voltage,
+                           origin='user-configured-active-core-model')
+        self._show_resources()
+
+    def _show_resources(self) -> None:
+        texts = resource_text(self.stack_profile, self.catalog, self.instruction_counts,
+                              self.selected_level, self.model.stop, self.energy_model,
+                              self._count_status)
+        for key, text in zip(('stack', 'instruction', 'energy'), texts):
+            if key == 'stack' and self._stack_error:
+                text += '\nGDB stack snapshot unavailable: ' + self._stack_error
+            self.query_one(f'#{key}_content', Static).update(text)
+
+    def _poll_instruction_profile(self) -> None:
+        if self.instruction_path is None:
+            return
+        previous_status = self._count_status
+        changed = False
+        try:
+            if self.catalog is None:
+                raise ValueError('ELF unavailable: ' + self._catalog_error)
+            data = json.loads(self.instruction_path.read_text())
+            changed = self.instruction_counts.update(data, self.catalog)
+            self._count_status = ''
+            if changed:
+                self._trace_record('instruction_profile', elf_sha256=self.catalog.sha256,
+                                   run=self.instruction_counts.run, profile_seq=self.instruction_counts.seq,
+                                   total=self.instruction_counts.total, unknown=self.instruction_counts.unknown,
+                                   complete=self.instruction_counts.complete,
+                                   functions=dict(self.instruction_counts.by_function),
+                                   origin='qemu-plugin-instruction-dispatch')
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+            self._count_status = f'Instruction profile unavailable: {exc}'
+        if changed or previous_status != self._count_status:
+            self._show_resources()
+
+    def _request_stack(self) -> None:
+        if self._stack_ready and self.status == 'HALTED':
+            code = f'python dbg3k_stack_snapshot({self.model.stop})'
+            self._send(f'-interpreter-exec console "{code}"', 'stack_snapshot')
 
     def _handle(self, record: Record) -> None:
         if record.kind in ('~', '@', '&'):
             message = str(record.payload).strip()
+            stack = decode_stack(message) if record.kind == '~' else None
+            if stack is not None:
+                if (self.status == 'HALTED' and stack['stop'] == self.model.stop and
+                        stack['thread'] == self._active_thread):
+                    self.stack_profile.update(stack, self.catalog)
+                    self._stack_error = ''
+                    self._trace_record('stack_sample', stop=stack['stop'], thread=stack['thread'],
+                                       registers=stack['registers'], frames=stack['frames'],
+                                       truncated=stack.get('truncated', False),
+                                       origin='gdb-unwound-registers')
+                    self._show_resources()
+                return
             data = probe_return(message) if record.kind == '~' else None
             if data is not None:
                 self._record_probe_return(data)
@@ -369,6 +461,9 @@ class DebuggerApp(App):
                                message=record.payload.get('msg', 'GDB error'))
             if purpose == 'return_observer':
                 self._log('Automatic returns unavailable (GDB Python required); use o / finish to observe returns.')
+            if purpose in ('stack_observer', 'stack_snapshot'):
+                self._stack_error = str(record.payload.get('msg', 'GDB Python stack query failed'))
+                self._show_resources()
             if purpose == 'vars':
                 self._watches_error = str(record.payload.get('msg', 'GDB rejected locals request'))
                 self._show_watches()
@@ -405,6 +500,14 @@ class DebuggerApp(App):
             helper = str(Path(__file__).with_name('gdb_returns.py').resolve())
             code = f'python exec(compile(open({helper!r}).read(), {helper!r}, "exec"))'
             self._send(f'-interpreter-exec console "{self._quoted(code)}"', 'return_observer')
+            helper = str(Path(__file__).with_name('gdb_resources.py').resolve())
+            code = f'python exec(compile(open({helper!r}).read(), {helper!r}, "exec"))'
+            self._send(f'-interpreter-exec console "{self._quoted(code)}"', 'stack_observer')
+            if self.energy_model:
+                self.set_energy_model(self.energy_model)
+        elif purpose == 'stack_observer':
+            self._stack_ready = True
+            self._request_stack()
         elif purpose == 'return_observer':
             self._log('Automatic returns: tracking debug-visible functions encountered at stops.')
         elif purpose == 'thread_info':
@@ -416,6 +519,7 @@ class DebuggerApp(App):
             raw = record.payload.get('stack', [])
             frames = [Frame.from_mi(item['frame']) for item in raw if isinstance(item, dict) and 'frame' in item]
             self.model.set_frames(frames)
+            self._show_resources()
             self._trace_record('frames', stop=self.model.stop,
                                thread=self._active_thread, frames=[
                                    dict(level=f.level, function=f.function,
@@ -517,6 +621,7 @@ class DebuggerApp(App):
         frame_command = (f'-stack-list-frames --thread {self._active_thread}'
                          if self._active_thread else '-stack-list-frames')
         self._send(frame_command, 'frames')
+        self._request_stack()
         self._show_status()
 
     def _show_status(self) -> None:
@@ -783,6 +888,7 @@ class DebuggerApp(App):
             self.selected_level = event.node.data
             self.nav_file = ''  # selecting source never executes firmware
             self._show_source(reveal=True, follow_pc=True)
+            self._show_resources()
 
     def _copy(self, content: str, description: str) -> None:
         if not content:

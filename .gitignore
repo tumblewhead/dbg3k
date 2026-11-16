@@ -9,3 +9,4 @@ examples/an505/firmware.elf
 examples/an505/firmware.map
 core
 *.core
+plugins/*.so

@@ -2,7 +2,10 @@
 
 A keyboard-first terminal source debugger for embedded C/C++, with scoped watches, value-change highlighting, sparklines, and eventual per-function memory/instruction/energy profiling. Born from a working QEMU `mps2-an505` bare-metal experiment. The conceptual name is **qscope**; the canonical repository name is **dbg3k**.
 
-**Status:** M0.1 alpha. Textual, GDB/MI, local and global watches, unit tests, and AN505 example are on this branch. The user confirmed local watches work on Arch; global watches still need a live QEMU/GDB retest. No stack-byte or instruction profiling is implemented yet.
+**Status:** Alpha. Textual/GDB source and watches, retained returns, sampled stack
+estimates, ELF function sizes, and optional QEMU instruction dispatch profiling.
+Local watches are user-confirmed; the resource collector has real AN505 emulator
+tests. Stack bounds, silicon cycles and measured power remain unavailable.
 
 ## Getting started on Arch Linux
 
@@ -40,12 +43,19 @@ python -m compileall -q src tests
 
 ## Components
 
+**Stack, instruction and energy profiling:** three selectable panes now show
+GDB stack snapshots/estimates, ELF function body sizes, QEMU plugin instruction
+dispatch counts, and user-configured energy estimates. See
+[setup, launch commands and measurement limits](docs/RESOURCES.md).
+
 - `src/dbg3k/mi.py`: GDB/MI record parser, no CLI scraping
 - `src/dbg3k/backend.py`: subprocess, tokenized MI transport and event queue
 - `src/dbg3k/model.py`: frame-aware locals and globals, bounded histories, numeric sparklines
 - `src/dbg3k/globals.py`: GDB/MI global and file-static symbol discovery with disambiguation
 - `src/dbg3k/app.py`: Textual source pane, scope tree, watch display, keyboard stepping
 - `src/dbg3k/views.py`: palette view choices and checkbox dialog
+- `src/dbg3k/resources.py`: ELF, stack, instruction and energy evidence model
+- `plugins/counts.c`: actual QEMU per-PC instruction dispatch collector
 - `examples/an505/`: sample with the Secure RAM mapping verified in the precursor QEMU experiment
 - `docs/DESIGN.md`: product and measurement contracts
 - `docs/CONVERSATION_NOTES.md`: preserved design discussion
@@ -57,7 +67,8 @@ python -m compileall -q src tests
 
 Press **Ctrl+P**, search **Views**, and press Enter. Click checkboxes or use
 Up/Down and Space to show or hide Source, Stack tree and observed returns,
-Immediate scope watch, Globals, and GDB console. Esc or Done closes the dialog.
+Immediate scope watch, Globals, GDB console, Stack frames and stack watch,
+Code and instruction counts, and Energy estimate. Esc or Done closes the dialog.
 Individual **View:** commands in the palette also show a checkmark when enabled.
 Highlight a View command and press **Left or Right** to toggle it while keeping
 the palette, search text and selection open. Left/Right also toggle checkboxes

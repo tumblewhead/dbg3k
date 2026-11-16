@@ -6,7 +6,8 @@ from textual.binding import Binding
 from textual.command import Command, CommandList, CommandPalette, Hit
 from textual.containers import Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, SelectionList, Static
+from textual.widgets import Button, SelectionList, Static, Input, Label
+from .resources import EnergyModel
 
 
 VIEWS = {
@@ -15,6 +16,9 @@ VIEWS = {
     'immediate': ('Immediate scope watch', '#watch_panel'),
     'globals': ('Globals', '#global_panel'),
     'console': ('GDB console', '#console_panel'),
+    'stack': ('Stack frames and stack watch', '#stack_panel'),
+    'instructions': ('Code and instruction counts', '#instruction_panel'),
+    'energy': ('Energy estimate', '#energy_panel'),
 }
 
 
@@ -74,7 +78,7 @@ class ViewsScreen(ModalScreen):
     ViewsScreen { align: center middle; }
     #view_choices { width: 62; height: auto; padding: 1 2;
         border: round $accent; background: $surface; }
-    #view_choices SelectionList { height: 7; }
+    #view_choices SelectionList { height: 10; }
     #view_choices Button { margin-top: 1; }
     """
     BINDINGS = [('escape', 'dismiss', 'Done'),
@@ -104,3 +108,36 @@ class ViewsScreen(ModalScreen):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == 'views_done':
             self.dismiss()
+
+
+class EnergyScreen(ModalScreen):
+    DEFAULT_CSS = """
+    EnergyScreen { align: center middle; }
+    #energy_form { width: 62; height: auto; padding: 1 2;
+        border: round $accent; background: $surface; }
+    #energy_error { color: $error; height: auto; }
+    """
+    BINDINGS = [('escape', 'dismiss', 'Cancel')]
+
+    def compose(self):
+        model = self.app.energy_model
+        with Vertical(id='energy_form'):
+            yield Static('Active-core energy model · user assumptions')
+            for key, label in [('ua_per_mhz', 'Active current slope (µA/MHz)'),
+                               ('mips_per_mhz', 'Throughput (MIPS/MHz)'), ('voltage', 'Supply (V)')]:
+                yield Label(label)
+                yield Input(str(getattr(model, key)) if model else '', id=key, type='number')
+            yield Static('', id='energy_error')
+            yield Button('Apply assumptions', id='energy_apply', variant='primary')
+
+    def on_button_pressed(self, event: Button.Pressed):
+        if event.button.id != 'energy_apply':
+            return
+        try:
+            model = EnergyModel(*(float(self.query_one('#' + key, Input).value)
+                                  for key in ('ua_per_mhz', 'mips_per_mhz', 'voltage')))
+        except ValueError as exc:
+            self.query_one('#energy_error', Static).update(str(exc))
+            return
+        self.app.set_energy_model(model)
+        self.dismiss()

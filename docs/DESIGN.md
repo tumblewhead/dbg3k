@@ -31,11 +31,19 @@ Watches retain a bounded (initially 128) sample history, time axis by stop seque
 
 ## Stack attribution
 
+The first resource implementation uses three selectable panes: Stack, Code &
+Instructions, and Energy. GDB Python supplies stopped frame/register snapshots;
+ELF symbols supply emitted body extents; a single-vCPU QEMU plugin supplies
+exclusive instruction dispatch counts. Stack bytes remain sampled unwind
+estimates, inclusive instruction counts are unavailable, and energy requires
+explicit user assumptions. Average power remains unavailable without target
+duration. See [RESOURCES.md](RESOURCES.md) for the evidence and launch contract.
+
 Per invocation: physical frame contribution, cumulative depth from an identified stack origin, inclusive maximum including callees, and observed maximum stack pointer displacement. Separate call-stack depth (frames) from bytes. Track MSP vs PSP independently, consider interrupts/hardware exception frames, dynamic allocation, recursion, tail calls, inlining, and compiler optimizations. GDB SP differences are estimates; exact maxima require SP tracing, instrumentation, or carefully qualified stack coloring. Mark evidence quality.
 
 ## Instruction attribution and static footprint
 
-Use ELF/DWARF/linker maps for `.text` bytes per emitted body and address mapping. Thumb instruction width can be 16 or 32 bits. Inlining, veneers, aliases and unknown code ranges need explicit buckets, not invented ownership. QEMU TCG plugin is planned to count **executed guest instructions** by PC (initially exclusive). Inclusive call-tree totals require call/return and exception-context tracking. Include call counts, per-invocation work, instruction share with a stated denominator and time/window selection, and density = executed instructions/static bytes. Instruction share is NOT measured CPU time or energy. QEMU host execution time is not a useful MCU CPU measurement.
+Use ELF/DWARF/linker maps for `.text` bytes per emitted body and address mapping. Thumb instruction width can be 16 or 32 bits. Inlining, veneers, aliases and unknown code ranges need explicit buckets, not invented ownership. The first QEMU TCG plugin counts **guest instruction dispatches** by PC (exclusive, potentially faulting; not necessarily retired). Inclusive call-tree totals require call/return and exception-context tracking. Future profiles can add call counts, per-invocation work and density. Current share uses all-code dispatches since QEMU launch as denominator. Instruction share is NOT measured CPU time or energy. QEMU host execution time is not a useful MCU CPU measurement.
 
 ## Energy model
 
@@ -62,7 +70,7 @@ Sort by `.text` bytes, exclusive/inclusive instructions, stack own vs peak, appr
 
 **M0.2:** verify real Arch/QEMU/GDB/Textual integration; add fake-GDB tests, assembly pane, editable command console, MSP/PSP registers, robust MI dispatch, invocation tracking, numeric prefixes and auto-step.
 
-**M0.3:** ELF function `.text` sizes, QEMU TCG instruction-PC histogram, resource panel, unowned-PC accounting; start stack observation with explicit precision.
+**M0.3 first slice implemented:** ELF function body sizes, QEMU TCG dispatch-PC histogram, three resource panes, unknown-PC accounting and sampled unwound-SP estimates. Inclusive/invocation instruction attribution and proven stack bounds remain unavailable.
 
 **M0.4+:** complete self/inclusive attribution through call/exception trace, stack-frame contributions, energy model, build comparison, runtime task context, history drill-down.
 
