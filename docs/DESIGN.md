@@ -12,6 +12,15 @@ Source, stack tree with persistent observed returns, immediate scope watches
 Source browsing does not change the immediate watch's scope. View visibility
 does not control debugger execution or history collection.
 
+Left/Right toggles the highlighted View entry without dismissing the palette.
+An optional GDB Python helper is installed automatically on connection; internal
+finish breakpoints observe returns from normal debug-visible frames encountered
+at stops. Structured JSON arrives over MI console records, separate from target
+output. This supports normal source stepping and continuing from observed
+functions. Missing GDB Python falls back to MI finish events. No return is
+inferred for calls entirely skipped between visible stops. These observations
+are aggregated caller/callee histories, not exact invocation traces.
+
 CPU -> thread/task/exception context -> call invocation -> lexical scope -> symbol. Two projections: active call tree and aggregate call tree. Symbol identity should incorporate build ID, compilation unit, DWARF DIE or code ranges; locals add lexical declaration identity; instances add task/thread and invocation. Human display defaults to `function.local`. Recursion and shadowed names must be distinguishable. Frame number is *not* a permanent identity. Calls between debugger stops cannot always be observed without trace.
 
 Watches retain a bounded (initially 128) sample history, time axis by stop sequence, not clock time. Show value delta and optional Unicode sparklines. Later: pin expressions, expand struct/array, snapshot review, and globals.

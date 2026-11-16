@@ -2,6 +2,7 @@
 import unittest
 
 from textual.widgets import SelectionList, Static, Tree
+from textual.command import CommandInput, CommandList
 
 from dbg3k.app import DebuggerApp
 from dbg3k.calltree import ReturnObservation
@@ -62,6 +63,45 @@ class ViewTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             self.assertTrue(app.query_one('#workbench').display)
             self.assertGreater(app.query_one('#scope').size.height, 0)
+
+    async def test_left_right_toggle_in_palette_without_losing_search(self):
+        app = self.app()
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.press('ctrl+p')
+            await pilot.press(*'view globals')
+            await pilot.pause()
+            palette = app.screen
+            commands = palette.query_one(CommandList)
+            selected = commands.highlighted
+            self.assertEqual(palette._highlighted_view(), 'globals')
+            await pilot.press('left')
+            await pilot.pause()
+            self.assertIs(app.screen, palette)
+            self.assertNotIn('globals', app.visible_views)
+            self.assertEqual(palette.query_one(CommandInput).value, 'view globals')
+            self.assertEqual(commands.highlighted, selected)
+            self.assertIn('☐ View: Globals', str(commands.get_option_at_index(selected).prompt))
+            await pilot.press('right')
+            await pilot.pause()
+            self.assertIn('globals', app.visible_views)
+            self.assertIn('✓ View: Globals', str(commands.get_option_at_index(selected).prompt))
+            await pilot.press('ctrl+a', *'theme')
+            await pilot.pause()
+            search = palette.query_one(CommandInput)
+            cursor = search.cursor_position
+            await pilot.press('left')
+            self.assertEqual(search.cursor_position, cursor - 1)
+            await pilot.press('escape')
+            app.action_choose_views()
+            await pilot.pause()
+            choices = app.screen.query_one(SelectionList)
+            choices.focus()
+            await pilot.press('right')
+            await pilot.pause()
+            self.assertNotIn('source', app.visible_views)
+            await pilot.press('left')
+            await pilot.pause()
+            self.assertIn('source', app.visible_views)
 
     async def test_immediate_and_global_scopes_and_returns_survive_hidden_tree(self):
         app = self.app()

@@ -3,11 +3,45 @@
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/selectable-debugger-views` (based on `feature/m0-1-mi-textual-scope-001`)
 **Review:** https://github.com/tumblewhead/dbg3k/pull/2 (draft, based on the M0.1 branch; original work in PR #1)
-**Current stage:** M0.1 selectable views, immediate scope/global separation and return summaries; 38 local tests pass, live Arch/QEMU check pending.
+**Current stage:** Palette Left/Right toggles and automatic return capture during ordinary stepping; 43 local checks pass including real GDB/QEMU AN505.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
+
+### 2026-11-15: normal stepping returns and palette arrow toggles
+
+User confirmed the missing return values occur while using ordinary `s/n`.
+The local existing firmware JSONL corroborated this: 84 source-step commands,
+9 instruction steps, 94 end-stepping-range stops, zero function-finished stops
+and zero return records, despite bar frames being observed. The previous fixes
+retained rows correctly but only populated them after `o`/finish.
+
+Added a GDB Python observer using internal FinishBreakpoints for normal
+debug-visible executing frames encountered at stops. GDB supplies actual return
+values; structured JSON passes over MI console records to the existing return
+ledger/tree/JSONL. Probes auto-resume without visible stops; normal `s/n` and
+continue now capture returns from observed functions. `o` and probe evidence
+are deduplicated. Missing Python logs a diagnostic and retains MI finish fallback.
+Unseen calls entirely between stops, unsupported frames and unavailable/void
+values remain explicitly unobserved/unreported. Probes are bounded to 128 and
+out-of-scope unwinds do not invent normal returns. No timing or task identity
+claims were added. GDB subprocess shutdown now closes its pipes (real-test
+ResourceWarnings exposed the omission).
+
+The actual command palette now accepts Left/Right on highlighted View entries
+without closing, losing search text or moving selection. Checkmarks update in
+place. Arrows continue editing search text for non-view commands. The checkbox
+dialog also supports both arrows.
+
+Validation: 43 checks pass including the opt-in mounted Textual + real GDB 17.2,
+QEMU 11.1 AN505 and GNU Arm GCC 16.2 test. Actual bar returns 6 via `s`, 9 via
+continue, and 12 via `n`; foo returns 8 via `o` exactly once. Historical row
+identity survives caller exit and subsequent returns; JSONL has real probe
+provenance. Dedicated CI job added for the real GDB/QEMU test. Compileall and
+diff whitespace checks pass. See handoff/returns-validation.json for reproduction
+and earlier sandbox socket failure. Current Kodama/terminal behavior remains for
+user retest. Updates stay on feature/selectable-debugger-views and PR #2.
 
 ### 2026-11-15: selectable panes and immediate scope watches
 
