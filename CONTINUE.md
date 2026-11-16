@@ -2,7 +2,7 @@
 
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `fix/energy-history-updates` (based on PR #6's branch)
-**Review:** New energy reliability PR pending; preceding graphical work is PR #6.
+**Review:** https://github.com/tumblewhead/dbg3k/pull/7 (draft, stacked on PR #6)
 **Current stage:** Incremental JSONL profiling, sticky build-matched energy assumptions and transient-IO recovery; 61 local checks pass including real GDB/QEMU, review CI pending.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
