@@ -1,13 +1,42 @@
 # dbg3k: development history and continuation
 
 **Repository:** https://github.com/tumblewhead/dbg3k
-**Working branch:** `feature/m0-1-mi-textual-scope-001`
+**Working branch:** `feature/selectable-debugger-views` (based on `feature/m0-1-mi-textual-scope-001`)
 **Review:** https://github.com/tumblewhead/dbg3k/pull/1 (draft)
-**Current stage:** M0.1 persistent return-ledger and JSONL trace refinement, CI passed, awaiting live Arch/QEMU check.
+**Current stage:** M0.1 selectable views, immediate scope/global separation and return summaries; 38 local tests pass, live Arch/QEMU check pending.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
+
+### 2026-11-15: selectable panes and immediate scope watches
+
+Added Ctrl+P > Views checkbox dialog (Space/click, Esc/Done), plus individual
+palette View commands with checked/unchecked labels. Source, stack tree with
+returns, immediate scope watch, globals and console can be hidden independently.
+Choices last for the current session. Hidden panes retain observation histories;
+remaining panes fill space. The right column scrolls on short terminals. F2
+reveals a hidden console before focusing input.
+
+Globals now have their own pane and are absent from the stack tree. Immediate
+watches show executing frame 0 locals/arguments; browsing source from another
+frame does not redirect them. The tree retains locals for all queried frames.
+The prior durable observed-returns branch already exists in this checkout;
+preserved it and added latest-return summaries beneath active callers. Historical
+node identity survives caller exit, empty stacks and hide/show. Collapsing the
+historical section is now respected across redraws. GDB finish observations only;
+ordinary next still cannot supply unobserved callee return values.
+
+Validation: 38 unit/headless Textual tests pass with Python 3.14/Textual 7.5.0;
+compileall and diff whitespace checks pass. New tests drive the real palette,
+checkbox keyboard controls, F2, layout expansion, scope isolation and retained
+returns. One initial test failed because Textual normalizes width to `100w`;
+corrected it to assert actual rendered width. See handoff/views-validation.json.
+Live Kodama/QEMU retest and terminal clipboard review remain pending.
+
+Next: review the view-selection PR, run dbg3k on the new branch, use Ctrl+P >
+Views, and finish a callee with `o`; confirm its return remains in observed
+returns after its caller exits. No merge into main performed.
 
 ### 2026-11-15: QEMU learning experiment
 

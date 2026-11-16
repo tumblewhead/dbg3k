@@ -49,8 +49,10 @@ cpu0 / observed call stack
   ▶ active call stack
     main()
       foo(2)
-  ◆ globals (1)
 ~~~
+
+Globals are displayed in a separate pane. The active caller also shows its latest
+observed callee returns; those summaries use the same ledger and copy behavior.
 
 The return-history group is independent of the active stack. Its rows and tree-node identities **survive the caller leaving the stack** and subsequent asynchronous GDB replies. The displayed value is overwritten on subsequent returns, without recreating the node. Hover for the **last ten** observed returns, with debugger-stop numbers and original callee signatures. Select/click to copy the **entire current-session history** for that caller/callee edge, read from the JSONL file as TSV rather than the 10-event in-memory cache.
 
