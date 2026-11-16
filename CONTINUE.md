@@ -101,6 +101,16 @@ Feature branch `feature/m0-1-mi-textual-scope-001` created. Python GDB/MI parser
 
 **Next actions:** Pull latest feature branch on Arch; debug Kodama; enter bar from foo with 's' and finish with 'o' twice, observing one return line under foo with count 2. Hover shows both returns; clicking copies full TSV. Check JSONL path printed in GDB pane, and inspect the file. Then progress to per-invocation/call-site IDs and automatic return interception (requiring actual trace instrumentation), plus previously planned stack/.text/energy profiling.
 
+### 2026-11-15: live user feedback: return line flashes then disappears
+
+**Observed:** On the user's Arch/QEMU session the GDB-reported bar return briefly appeared then was overwritten. Root cause from code inspection: `_show_scope` used `tree.root.remove_children()` for every frame/locals/args/global response and reinserted a return node only under an **active caller frame**. When execution exited foo or the set of active frames changed, the return ledger still contained the event but the UI had no node for it. The whole-tree clear also destroyed hover/selection identity.
+
+**Fix:** `app.py` now establishes three stable root branches: `↩ observed returns` (first and always visible), `▶ active call stack`, `◆ globals`. Return groups are stable per (thread, caller) and return leaves per (thread, caller, callee); new observations call `set_label` to update the *same leaf* and retain tooltip/click identity. Only the active stack and global-variable branches are rebuilt on asynchronous MI results; return nodes are never cleared by frame exit. This meets the user's request that bar's latest return into foo remain visible through later iterations while the tooltip and JSONL hold the history.
+
+**Regression test:** `test_return_line_survives_caller_exit_and_repeated_async_redraw` creates foo+main frames, records bar→foo, transitions to main-only, redraws five times, then observes a new bar return. It asserts exact return-node object identity, same single row, new value/count, tooltip and copy data after caller exit. The existing visual smoke test was updated to find return leaves in historical caller groups. CI passed on `2f4a3a6`; live user retest still needed.
+
+**Next:** Pull feature branch, show foo's bar return, leave foo to main, then step more: verify return row remains in `↩ observed returns > foo() [thread 1]` and updates without blinking, with hover/click and JSONL untouched.
+
 ## Resuming on the user's Arch Linux workstation
 
 ```sh
