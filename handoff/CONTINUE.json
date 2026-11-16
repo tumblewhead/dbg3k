@@ -5,7 +5,7 @@
   "canonical_branch": "main",
   "working_branch": "feature/m0-1-mi-textual-scope-001",
   "milestone": "M0.1",
-  "status": "PERSISTENT_RETURNS_JSONL_CI_PASSED_ARCH_RETEST_PENDING",
+  "status": "PERSISTENT_RETURN_TREE_IDENTITY_CI_PASS_ARCH_RETEST_PENDING",
   "validated": [
     "User reports Textual TUI launches",
     "User reports clicking a scope-tree function shows source",
@@ -20,7 +20,8 @@
     "User traceback proves GDB successfully returned Reset_Handler frame from Kodama ARM example",
     "Return ledger repeated events and session-filtered full JSONL copy passed in GitHub CI",
     "Textual headless integration replays two bar->foo function-finished events and verifies persistent one-row tooltip and copy",
-    "TraceWriter uses append-only ELF-stem_YYYY-MM-DD.jsonl with per-session ID and flushed records"
+    "TraceWriter uses append-only ELF-stem_YYYY-MM-DD.jsonl with per-session ID and flushed records",
+    "Headless regression test proves same return TreeNode survives foo exit to main and five asynchronous redraws, updates on next return"
   ],
   "unvalidated": [
     "Live Textual VerticalScroll behavior on Arch",
@@ -31,14 +32,14 @@
     "Actual terminal tooltip and clipboard behavior for 4096-sample TSV",
     "Latest contrast-ink fix on user's Arch Textual 7.x / Python 3.14 / QEMU",
     "Live Kodama QEMU: repeated observed bar returns, pointer hover and click OSC52 clipboard",
-    "Long-duration debugger-stop trace size and IO performance"
+    "Long-duration debugger-stop trace size and IO performance",
+    "Live Arch/QEMU return row remains in stable observed returns section after caller foo exits"
   ],
   "next": [
-    "Confirm CI passes final trace test and docs updates",
-    "On user Arch run git pull --ff-only on feature branch and python -m pip install -e .",
-    "Start QEMU demo and dbg3k, step into bar from foo with s, finish bar with o, repeat; verify single caller return row increments count and overwrites last value",
-    "Hover return row for last ten events; click/enter row to copy all current-session returns; verify JSONL and parse JSONL in project terminal",
-    "Address feedback and add call-site/invocation discriminators, automatic return trace beyond GDB finish, then stack/.text/power profiling"
+    "On user's workstation pull feature/m0-1-mi-textual-scope-001, pip install -e ., restart dbg3k against Kodama/QEMU",
+    "Finish bar while foo is caller and verify row ↩ observed returns > foo() > ↳ bar(n) ⟵ value remains visible after foo exits",
+    "Repeat bar returns across loop, verify same row updates count without flashing and tooltip last-ten/click history copies all current-session records from JSONL",
+    "After live receipt continue call-site/invocation identities, instruction QEMU plugin, stack and power profiling"
   ],
   "decisions": [
     "Scope tree canonical",
@@ -51,7 +52,8 @@
     "Call tree shows debug-available argument values; return values only GDB function-finished events",
     "Watch UI raw numeric until three observations then sparkline; tooltip last ten; copy TSV of bounded 4096-sample history",
     "Return-history UI groups by thread/caller/callee, one overwriteable row, ten-item hover; JSONL is full-history source",
-    "On GDB connection, append to ./dbg3k-history/<ELF stem>_<local date>.jsonl, --history-dir override; sessions disambiguated by UUID"
+    "On GDB connection, append to ./dbg3k-history/<ELF stem>_<local date>.jsonl, --history-dir override; sessions disambiguated by UUID",
+    "Historical return display independent of active stack; stable return TreeNode updated in place, never destroyed by _show_scope"
   ],
   "limitations": [
     "no measured instruction/stack/energy profiles",
@@ -71,7 +73,7 @@
     "docs/CONVERSATION_NOTES.md",
     "docs/TRACE_JSONL.md"
   ],
-  "summary": "Implemented permanent-at-caller return row (latest GDB function-finished value overwrites, count increments), last-ten tooltip and click-to-copy full session return history from append-only targetname_date.jsonl. JSONL writer records GDB stops/frames/args/locals/globals/returns/commands/errors with versioned per-session envelope. Tests replay two bar returns into foo, verify UI tooltip and complete disk-copy. Live Arch/GDB retest remains.",
+  "summary": "User observed bar return flashing then vanishing. Cause: _show_scope cleared whole root and only inserted return history under active foo frame. Refactored stable root into observed returns / active stack / globals; return leaf identity and latest value persist across caller exit, stop responses, and async tree redraws. JSONL unchanged; new UI regression tests pass, live Arch retest pending.",
   "known_issues": {
     "reported": [
       "Global and file-static variables not previously shown (new implementation awaiting Arch retest)",
@@ -85,7 +87,7 @@
     "calltree": "GDB MI -stack-list-arguments displays current arguments; function-finished return-value shown in caller on that stop only.",
     "watch_history": "Two numeric samples as list, three or more as 24-char sparkline, last-ten tooltip, 4096 host-side cap; click row or H copies TSV.",
     "rich_startup": "Reported 2026-11-15: Rich MissingStyle from Theme.background=None in source-line highlight; fixed with luminance-based contrasting foreground and regression test. Awaiting live Arch retest.",
-    "return_history": "Persistent caller/callee return row implemented, hover last ten, click copies full session from JSONL; runtime Arch/QEMU test pending.",
+    "return_history": "Fixed disappearance: persistent separate observed returns branch with stable per-edge TreeNode not removed by frame/locals/args/global redraw. CI verified; Arch retest pending.",
     "jsonl": "Appends debugger-observed stop/frame/args/locals/globals/returns/commands/errors on each GDB session to dbg3k-history/targetname_YYYY-MM-DD.jsonl; session ID and sequence identify runs; not continuous simulation trace."
   }
 }
