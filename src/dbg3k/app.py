@@ -4,7 +4,6 @@ from __future__ import annotations
 from pathlib import Path
 from collections import deque
 import queue
-from rich.table import Table
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -16,26 +15,55 @@ from .globals import MAX_GLOBAL_WATCHES, GlobalSymbol, discover_globals
 
 from .backend import GdbTransport
 from .mi import Record
-from .model import Frame, ScopeModel
+from .model import Frame, ScopeModel, parse_stack_arguments
+from .calltree import ReturnObservation, display_call, observed_return
+from .watch_ui import WatchRow
 
 class DebuggerApp(App):
     TITLE = 'dbg3k'
     SUB_TITLE = 'Scope-first Cortex-M debugger · alpha'
     CSS = """
-    Screen { background: #101820; color: #dae7ee; }
-    Header { background: #172b38; color: #81d9f7; }
-    Footer { background: #172b38; }
-    #workbench { height: 1fr; }
-    #left { width: 63%; }
-    #right { width: 37%; }
-    #source_scroll { height: 1fr; border: round #2d596e; overflow-y: auto; overflow-x: auto; }
-    #source { height: auto; padding: 1 2; }
-    #stepbar { height: 3; background: #172b38; color: #7de5cb; padding: 0 1; }
-    #scope { height: 45%; border: round #2d596e; background: #192733; }
-    #watches { height: 1fr; border: round #2d596e; background: #192733; padding: 1; }
-    #console_panel { height: 10; border: round #2d596e; background: #192733; }
-    #console { height: 1fr; background: #192733; }
-    #gdb_input { height: 3; background: #223746; }
+    Screen { background: $background; color: $foreground; }
+    Header { background: $panel; color: $foreground; }
+    Footer { background: $panel; color: $foreground; }
+    #workbench { height: 1fr; background: $background; }
+    #left { width: 63%; background: $background; }
+    #right { width: 37%; background: $background; }
+    #source_scroll {
+        height: 1fr; border: round $border;
+        background: $surface; color: $foreground;
+        overflow-y: auto; overflow-x: auto;
+    }
+    #source { height: auto; padding: 1 2; background: $surface; color: $foreground; }
+    #stepbar { height: 3; background: $panel; color: $text-accent; padding: 0 1; }
+    #scope {
+        height: 43%; border: round $border;
+        background: $surface; color: $foreground;
+    }
+    #watch_panel {
+        height: 1fr; border: round $border;
+        background: $surface; color: $foreground; padding: 0 1;
+    }
+    #watch_heading { height: 1; color: $text-primary; text-style: bold; }
+    #watch_status { height: auto; max-height: 3; color: $text-muted; }
+    #watch_scroll { height: 1fr; background: $surface; }
+    #watch_rows { height: auto; background: $surface; }
+    WatchRow {
+        height: 1; width: 100%; background: $surface;
+        color: $foreground;
+    }
+    WatchRow:hover { background: $panel; }
+    .watch-name { width: 38%; color: $text-primary; }
+    .watch-value { width: 25%; color: $foreground; }
+    .watch-delta { width: 6%; color: $text-warning; }
+    .watch-history { width: 1fr; color: $text-accent; }
+    #console_panel {
+        height: 10; border: round $border;
+        background: $surface; color: $foreground;
+    }
+    #console { height: 1fr; background: $surface; color: $foreground; }
+    #gdb_input { height: 3; background: $panel; color: $foreground; }
+    Tooltip { background: $panel; color: $foreground; border: round $border; }
     """
     BINDINGS = [
         Binding('n', 'next', 'Next'),
@@ -58,6 +86,7 @@ class DebuggerApp(App):
         Binding('y', 'copy_line', 'Copy line', show=False),
         Binding('Y', 'copy_source', 'Copy file', show=False),
         Binding('W', 'copy_watches', 'Copy watches', show=False),
+        Binding('H', 'copy_history', 'Copy histories'),
         Binding('L', 'copy_log', 'Copy log', show=False),
         Binding('f2,colon', 'focus_console', 'GDB command'),
         Binding('escape', 'focus_source', 'Leave command', show=False),
@@ -87,6 +116,10 @@ class DebuggerApp(App):
         self._globals_error = ''
         self._global_result_stop: dict[int, int] = {}
         self._global_last_requested_stop = -1
+        self._argument_result_stop: dict[int, int] = {}
+        self._last_return: ReturnObservation | None = None
+        self._rendered_theme: str | None = None
+        self._watch_rows: dict[str, WatchRow] = {}
         self._connected = False
         self._log_lines: deque[str] = deque(maxlen=500)
 
@@ -99,7 +132,11 @@ class DebuggerApp(App):
                 yield Static('s:into  n:next  i:instruction  Space:repeat  j/k:cursor  b:break', id='stepbar')
             with Vertical(id='right'):
                 yield Tree('cpu0 / observed call stack', id='scope')
-                yield Static('Watches appear when GDB stops.', id='watches')
+                with Vertical(id='watch_panel'):
+                    yield Static('WATCHES  ·  hover history / click to copy', id='watch_heading')
+                    yield Static('Locals & globals appear when GDB stops.', id='watch_status')
+                    with VerticalScroll(id='watch_scroll'):
+                        yield Vertical(id='watch_rows')
         with Vertical(id='console_panel'):
             yield RichLog(id='console', highlight=True, markup=False)
             yield Input(id='gdb_input', placeholder=': GDB console command (paste and press Enter)')
@@ -141,6 +178,12 @@ class DebuggerApp(App):
             except queue.Empty:
                 break
             self._handle(record)
+        if self.theme != self._rendered_theme:
+            # Textual repaints CSS variables automatically; Rich Text needs a
+            # fresh rendering because its styles are snapshots, not CSS.
+            self._rendered_theme = self.theme
+            self._show_source()
+            self._show_watches()
 
     def _handle(self, record: Record) -> None:
         if record.kind in ('~', '@', '&'):
@@ -157,6 +200,10 @@ class DebuggerApp(App):
             self._show_status()
             return
         if record.kind == '*' and record.cls == 'stopped':
+            old_top = self.model.frames[0] if self.model.frames else None
+            self._last_return = observed_return(
+                record.payload if isinstance(record.payload, dict) else {},
+                old_top, self.model.stop + 1)
             thread = record.payload.get('thread-id') if isinstance(record.payload, dict) else None
             if thread is not None and str(thread).isdecimal():
                 self._active_thread = str(thread)
@@ -171,6 +218,7 @@ class DebuggerApp(App):
             return
         purpose, level = self.pending.pop(record.token, ('unknown', None))
         global_result_stop = self._global_result_stop.pop(record.token, None)
+        argument_result_stop = self._argument_result_stop.pop(record.token, None)
         if record.cls == 'error':
             self._log(f'{purpose}: {record.payload.get("msg", "GDB error")}')
             if purpose == 'vars':
@@ -221,6 +269,13 @@ class DebuggerApp(App):
                 for frame in frames[:12]:
                     self._send(locals_request(self._active_thread, frame.level),
                                'vars', frame.level)
+                if frames:
+                    last_level = max(frame.level for frame in frames[:12])
+                    token = self._send(
+                        f'-stack-list-arguments --thread {self._active_thread} '
+                        f'--all-values 0 {last_level}', 'args')
+                    if token is not None:
+                        self._argument_result_stop[token] = self.model.stop
             self._refresh_globals()
         elif purpose == 'globals_discover':
             self._globals, self._globals_truncated = discover_globals(record.payload)
@@ -234,6 +289,10 @@ class DebuggerApp(App):
                     symbol.key, symbol.label, symbol.name,
                     str(record.payload.get('value', '<unavailable>')), symbol.type_name)
                 self._finish_global_display()
+        elif purpose == 'args':
+            if argument_result_stop == self.model.stop:
+                self.model.set_frame_arguments(parse_stack_arguments(record.payload))
+                self._show_scope()
         elif purpose == 'vars' and level is not None:
             variables = record.payload.get('variables', [])
             if not isinstance(variables, list):
@@ -287,7 +346,7 @@ class DebuggerApp(App):
     def _show_status(self) -> None:
         self.query_one('#stepbar', Static).update(
             f'[{self.status}]  s:into  n:next  i:instr  I:over-instr  Space:repeat  '
-            f'j/k:cursor  b:break  r:until  c:run  y:copy  W:watches  L:log  ::GDB  · Stop #{self.model.stop}'
+            f'j/k:cursor  b:break  r:until  c:run  y:copy  W:watches  H:history  L:log  ::GDB  · Stop #{self.model.stop}'
         )
 
     def _show_source(self, *, reveal: bool = False, follow_pc: bool = False) -> None:
@@ -303,11 +362,12 @@ class DebuggerApp(App):
         elif follow_pc:
             self.nav_line = frame.line or self.nav_line
         text = Text()
+        theme = self.current_theme
         path = Path(self.nav_file)
         if not path.is_file():
             self._source_lines = 0
             text.append(f'Source unavailable: {self.nav_file}\nPC {frame.pc}\n')
-            text.append('Check GDB source paths or rebuild with -g3.', style='yellow')
+            text.append('Check GDB source paths or rebuild with -g3.', style=theme.warning)
             self.query_one('#source', Static).update(text)
             return
         try:
@@ -323,15 +383,15 @@ class DebuggerApp(App):
         self._source_lines = len(lines)
         self.nav_line = max(1, min(len(lines), self.nav_line))
         text.append(f'{path.name} · PC {frame.pc} · line {frame.line}\n\n',
-                    style='bold #81d9f7')
+                    style=f'bold {theme.primary}')
         for i, source in enumerate(lines, start=1):
             execution = frame.filename == self.nav_file and i == frame.line
             selected = i == self.nav_line
             has_bp = (self.nav_file, i) in self.breaks
             mark = '▶' if execution else ('▸' if selected else ' ')
             bpmark = '●' if has_bp else ' '
-            style = ('bold black on #79c8b6' if execution else
-                     'bold #7dd3fc' if selected else '#d7e4ee')
+            style = (f'bold {theme.background} on {theme.success}' if execution else
+                     f'bold {theme.accent}' if selected else theme.foreground)
             text.append(f'{mark}{bpmark}{i:4} │ {source}\n', style=style)
         self.query_one('#source', Static).update(text)
         if reveal or changed_file:
@@ -348,11 +408,15 @@ class DebuggerApp(App):
         parent = tree.root
         for frame in reversed(self.model.frames):
             node = parent.add(
-                f'{frame.function}() [{frame.filename.rsplit("/", 1)[-1]}:{frame.line}]',
+                f'{display_call(frame)} [{frame.filename.rsplit("/", 1)[-1]}:{frame.line}]',
                 data=frame.level,
             )
             for watch in sorted(self.model.active_watches(frame.level), key=lambda w: w.name):
-                node.add_leaf(f'{watch.name} = {watch.value}' + (' ●' if watch.changed else ''))
+                node.add_leaf(f'{watch.name} = {watch.value}' + (' ◆' if watch.changed else ''))
+            if (self._last_return is not None and
+                    self._last_return.stop == self.model.stop and
+                    self._last_return.caller_function == frame.function):
+                node.add_leaf(self._last_return.display)
             node.expand()
             parent = node
         globals_now = sorted(self.model.active_globals(), key=lambda watch: watch.label)
@@ -364,29 +428,36 @@ class DebuggerApp(App):
         tree.root.expand()
 
     def _show_watches(self) -> None:
-        table = Table(title='Watches · locals and globals · stop sampled', show_edge=False, box=None, expand=True)
-        table.add_column('scope.local', style='#a5cdeb', no_wrap=True)
-        table.add_column('Value', style='#dae7ee')
-        table.add_column('Δ', justify='center')
-        table.add_column('History', style='#79c8b6')
         watches = (sorted(self.model.active_globals(), key=lambda w: w.label)
                    + sorted(self.model.active_watches(), key=lambda w: (w.frame_level, w.label)))
+        container = self.query_one('#watch_rows', Vertical)
+        current: dict[str, object] = {}
         for watch in watches:
-            table.add_row(watch.label, watch.value, '●' if watch.changed else '', watch.trend)
+            key = (f'global:{watch.symbol_id}' if watch.frame_level == -1 else
+                   f'local:{watch.frame_level}:{watch.generation}:{watch.symbol_id}')
+            current[key] = watch
+            row = self._watch_rows.get(key)
+            if row is None:
+                row = WatchRow(watch)
+                self._watch_rows[key] = row
+                container.mount(row)
+            else:
+                row.set_watch(watch)
+        for key in list(self._watch_rows):
+            if key not in current:
+                self._watch_rows.pop(key).remove()
+        warning = ''
         if self._watches_error:
-            self.query_one('#watches', Static).update(
-                f'[GDB locals error] {self._watches_error}\nSee GDB output below.')
-        elif watches:
-            if self._globals_error:
-                table.caption = f'Global discovery unavailable: {self._globals_error}'
-            elif self._globals_truncated:
-                table.caption = f'Globals limited to {MAX_GLOBAL_WATCHES}; selection planned'
-            self.query_one('#watches', Static).update(table)
-        elif not self._watch_results:
-            self.query_one('#watches', Static).update('Loading locals from GDB…')
-        else:
-            self.query_one('#watches', Static).update(
-                'No visible locals at this PC.\nStep into main()/foo() to inspect variables.')
+            warning = f'GDB locals: {self._watches_error}'
+        elif self._globals_error:
+            warning = f'Global discovery: {self._globals_error}'
+        elif self._globals_truncated:
+            warning = f'Globals limited to {MAX_GLOBAL_WATCHES}; selection planned'
+        elif not watches and not self._watch_results:
+            warning = 'Loading debugger-stop variables…'
+        elif not watches:
+            warning = 'No variables currently visible at this PC'
+        self.query_one('#watch_status', Static).update(warning)
 
     def _step(self, command: str) -> None:
         if self.status != 'HALTED':
@@ -491,6 +562,14 @@ class DebuggerApp(App):
                    + sorted(self.model.active_watches(), key=lambda w: (w.frame_level, w.label)))
         self._copy('\n'.join(f'{w.label}\t{w.value}\t{w.trend}' for w in watches),
                    'watch values')
+
+    def action_copy_history(self) -> None:
+        """Copy every retained sample, including out-of-scope local invocations."""
+        data = self.model.export_history_tsv()
+        if data.strip() == 'stop\tscope\tvalue':
+            self.notify('No watch history recorded yet', severity='warning')
+            return
+        self._copy(data, 'full retained watch history (TSV)')
 
     def action_copy_log(self) -> None:
         self._copy('\n'.join(self._log_lines), 'debugger log')
