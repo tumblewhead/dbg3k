@@ -32,7 +32,17 @@ class TraceWriter:
         self.session = session or uuid4().hex
         self.path = Path(directory).expanduser().resolve() / trace_filename(elf, stamp)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._file = self.path.open("a", encoding="utf-8")
+        self._file = self.path.open("a+", encoding="utf-8")
+        # A crash can leave an incomplete final JSONL line. Do not append a
+        # new valid record onto that fragment and corrupt the next session.
+        self._file.seek(0, 2)
+        end = self._file.tell()
+        if end:
+            self._file.seek(end - 1)
+            if self._file.read(1) != "\n":
+                self._file.seek(0, 2)
+                self._file.write("\n")
+                self._file.flush()
         self.sequence = 0
         self.closed = False
         self.record("session_start", elf=str(Path(elf).expanduser().resolve()),
