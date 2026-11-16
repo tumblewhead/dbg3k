@@ -3,7 +3,7 @@
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/stack-instruction-energy` (based on PR #4's branch)
 **Review:** https://github.com/tumblewhead/dbg3k/pull/5 (draft, stacked on open PR #4)
-**Current stage:** Three resource panes, actual QEMU dispatch collector, sampled GDB stack estimates and explicit energy model; 48 local tests pass including real QEMU/GDB.
+**Current stage:** Three resource panes, actual QEMU dispatch collector, sampled GDB stack estimates and explicit energy model; 48 local tests and source CI pass, including real QEMU/GDB.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
@@ -48,7 +48,9 @@ installation of pyelftools0.33 succeeded. The matching QEMU header was already
 installed; no downloaded header was needed locally. Physical silicon, interrupt
 stack precision, latest Kodama profiling and terminal ergonomics remain pending.
 
-Next: check new PR CI, launch QEMU with the collector following RESOURCES.md,
+CI source `bc803db` passed both Python and actual QEMU8.2/API1 tests in run
+43828640310; local QEMU11.1/API7 also passes. Latest checkpoint CI remains a
+separate commit check. Next: launch QEMU with the collector following RESOURCES.md,
 choose the resource panes and select active tree frames. Enter actual chip
 assumptions in Energy model; compare unknown counts and sampled stack peaks.
 
