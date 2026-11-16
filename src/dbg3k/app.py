@@ -103,6 +103,13 @@ class DebuggerApp(App):
         self._trace: TraceWriter | None = None
         self._trace_error_reported = False
         self._returns = ReturnLedger()
+        # Stable tree branches: only live frames are rebuilt at each GDB reply.
+        # Return history nodes must survive frame exit and subsequent refreshes.
+        self._stack_branch = None
+        self._return_branch = None
+        self._globals_branch = None
+        self._return_caller_nodes = {}
+        self._return_edge_nodes = {}
         self.transport = GdbTransport(gdb)
         self.model = ScopeModel()
         self.pending: dict[int, tuple[str, int | None]] = {}
@@ -522,9 +529,48 @@ class DebuggerApp(App):
         pane.scroll_to(y=y, animate=False)
 
     def _show_scope(self) -> None:
-        tree = self.query_one('#scope', Tree)
-        tree.root.remove_children()
-        parent = tree.root
+        """Keep observed returns visible even after their caller exits.
+
+        The previous implementation removed *all* root children on every MI
+        frame/locals/global reply, then attached returns only beneath frames
+        still in the live call stack. When foo returned to main, bar's latest
+        return row flashed once and disappeared. Scope history is not scope
+        lifetime: the return branch therefore has stable node identities.
+        """
+        tree = self.query_one('#scope', ScopeTree)
+        if self._return_branch is None:
+            self._return_branch = tree.root.add('↩ observed returns (0)')
+            self._stack_branch = tree.root.add('▶ active call stack')
+            self._globals_branch = tree.root.add('◆ globals')
+            self._return_branch.expand()
+            self._stack_branch.expand()
+            self._globals_branch.expand()
+
+        # Return nodes are created ONCE per (thread, caller, callee) edge.
+        # Keeping them in the tree preserves hover and selection across rapid
+        # GDB frame, argument and variable result callbacks.
+        self._return_branch.set_label(
+            f'↩ observed returns ({len(self._returns.series)})')
+        for key, series in sorted(
+                self._returns.series.items(),
+                key=lambda item: (item[0].thread, item[0].caller, item[0].callee)):
+            caller_key = (key.thread, key.caller)
+            caller = self._return_caller_nodes.get(caller_key)
+            if caller is None:
+                caller = self._return_branch.add(
+                    f'{key.caller}()  [thread {key.thread}]')
+                self._return_caller_nodes[caller_key] = caller
+                caller.expand()
+            node = self._return_edge_nodes.get(key)
+            if node is None:
+                node = caller.add_leaf(Text(series.label, style='bold'),
+                                       data=key)
+                self._return_edge_nodes[key] = node
+            else:
+                node.set_label(Text(series.label, style='bold'))
+
+        self._stack_branch.remove_children()
+        parent = self._stack_branch
         for frame in reversed(self.model.frames):
             node = parent.add(
                 f'{display_call(frame)} [{frame.filename.rsplit("/", 1)[-1]}:{frame.line}]',
@@ -532,21 +578,19 @@ class DebuggerApp(App):
             )
             for watch in sorted(self.model.active_watches(frame.level), key=lambda w: w.name):
                 node.add_leaf(f'{watch.name} = {watch.value}' + (' ◆' if watch.changed else ''))
-            for series in self._returns.for_caller(
-                    thread=self._active_thread or 'unknown', caller=frame.function):
-                # One durable node per caller/callee edge, replacing its value
-                # as more GDB function-finished observations arrive.
-                node.add_leaf(Text(series.label, style='bold'),
-                              data=series.key)
             node.expand()
             parent = node
+
+        self._globals_branch.remove_children()
         globals_now = sorted(self.model.active_globals(), key=lambda watch: watch.label)
-        global_node = tree.root.add(f'globals ({len(globals_now)})')
+        self._globals_branch.set_label(f'◆ globals ({len(globals_now)})')
         for watch in globals_now:
-            global_node.add_leaf(
+            self._globals_branch.add_leaf(
                 f'{watch.label} = {watch.value}' + (' ●' if watch.changed else ''))
-        global_node.expand()
         tree.root.expand()
+        self._stack_branch.expand()
+        self._return_branch.expand()
+        self._globals_branch.expand()
 
     def _show_watches(self) -> None:
         watches = (sorted(self.model.active_globals(), key=lambda w: w.label)
