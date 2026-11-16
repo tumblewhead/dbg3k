@@ -45,12 +45,29 @@ python -m compileall -q src tests
 - `src/dbg3k/model.py`: frame-aware locals and globals, bounded histories, numeric sparklines
 - `src/dbg3k/globals.py`: GDB/MI global and file-static symbol discovery with disambiguation
 - `src/dbg3k/app.py`: Textual source pane, scope tree, watch display, keyboard stepping
+- `src/dbg3k/views.py`: palette view choices and checkbox dialog
 - `examples/an505/`: sample with the Secure RAM mapping verified in the precursor QEMU experiment
 - `docs/DESIGN.md`: product and measurement contracts
 - `docs/CONVERSATION_NOTES.md`: preserved design discussion
 - `handoff/CONTINUE.json`: machine-readable next checkpoint
 
 **No fabricated measurements.** Instruction counts are not cycles, debugger-stop histories are not time series, and stack estimates are not guarantees.
+
+## Choose your views
+
+Press **Ctrl+P**, search **Views**, and press Enter. Click checkboxes or use
+Up/Down and Space to show or hide Source, Stack tree and observed returns,
+Immediate scope watch, Globals, and GDB console. Esc or Done closes the dialog.
+Individual **View:** commands in the palette also show a checkmark when enabled.
+Choices apply for the current session; all views start enabled on launch.
+
+The **immediate scope watch** shows only the executing frame (frame 0), including
+debug-visible arguments and locals. Browsing another frame's source leaves this
+watch on the executing frame. The **stack tree** retains locals for all queried
+active frames and observed return histories. **Globals** has its own pane.
+Hidden views retain histories and continue receiving debugger-stop updates.
+Remaining panes expand into available space; on short terminals the right column
+scrolls. F2 reveals the console if hidden and focuses its command input.
 
 ## Development journal and continuation
 
@@ -71,8 +88,8 @@ The watch backend first discovers a GDB thread via `-thread-info` or stop events
 GDB's `-stack-list-variables` reports frame locals only. dbg3k now uses
 `-symbol-info-variables` once per connection, then evaluates the discovered
 data symbols at each stopped PC using `-data-evaluate-expression`.
-The scope tree has a separate `globals` group and the watch table includes
-both local and global values, with shared change detection and sparklines.
+The Globals pane is independent of the stack tree and immediate scope watch,
+with shared change detection and sparklines.
 
 - External variable `ticks` is labeled `global.ticks`.
 - File-static variable `total` in `main.c` is labeled `main.c::total`, and
@@ -121,7 +138,10 @@ argument values and finish notifications look right for AN505.
 
 ## Persistent caller-return histories and JSONL trace
 
-The scope tree now keeps a **single, persistent return row per thread/caller/callee pair** while the caller is active. For example, after finishing bar from inside foo, the tree can show:
+The scope tree keeps a **single, persistent return row per thread/caller/callee pair**
+in its **observed returns** section, including after the caller leaves the stack.
+The latest observed return also appears under an active caller. For example,
+after finishing bar from inside foo, the active stack can show:
 
 ~~~text
 foo(2)

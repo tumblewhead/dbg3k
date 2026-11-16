@@ -3,10 +3,13 @@ from __future__ import annotations
 
 from pathlib import Path
 from collections import deque
+from functools import partial
+from collections.abc import Iterable
 import queue
 from rich.text import Text
-from textual.app import App, ComposeResult
+from textual.app import App, ComposeResult, SystemCommand
 from textual.binding import Binding
+from textual.screen import Screen
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Footer, Header, Input, RichLog, Static, Tree
 
@@ -15,11 +18,12 @@ from .globals import MAX_GLOBAL_WATCHES, GlobalSymbol, discover_globals
 
 from .backend import GdbTransport
 from .mi import Record
-from .model import Frame, ScopeModel, parse_stack_arguments
+from .model import Frame, ScopeModel, Watch, parse_stack_arguments
 from .calltree import ReturnKey, ReturnLedger, ReturnObservation, display_call, observed_return
 from .scope_ui import ScopeTree
 from .trace import TraceWriter
 from .watch_ui import WatchRow
+from .views import VIEWS, ViewsScreen
 
 class DebuggerApp(App):
     TITLE = 'dbg3k'
@@ -30,7 +34,7 @@ class DebuggerApp(App):
     Footer { background: $panel; color: $foreground; }
     #workbench { height: 1fr; background: $background; }
     #left { width: 63%; background: $background; }
-    #right { width: 37%; background: $background; }
+    #right { width: 37%; background: $background; overflow-y: auto; }
     #source_scroll {
         height: 1fr; border: round $border;
         background: $surface; color: $foreground;
@@ -39,17 +43,17 @@ class DebuggerApp(App):
     #source { height: auto; padding: 1 2; background: $surface; color: $foreground; }
     #stepbar { height: 3; background: $panel; color: $text-accent; padding: 0 1; }
     #scope {
-        height: 43%; border: round $border;
+        height: 2fr; min-height: 7; border: round $border;
         background: $surface; color: $foreground;
     }
-    #watch_panel {
-        height: 1fr; border: round $border;
+    #watch_panel, #global_panel {
+        height: 1fr; min-height: 6; border: round $border;
         background: $surface; color: $foreground; padding: 0 1;
     }
-    #watch_heading { height: 1; color: $text-primary; text-style: bold; }
-    #watch_status { height: auto; max-height: 3; color: $text-muted; }
-    #watch_scroll { height: 1fr; background: $surface; }
-    #watch_rows { height: auto; background: $surface; }
+    #watch_heading, #global_heading { height: 1; color: $text-primary; text-style: bold; }
+    #watch_status, #global_status { height: auto; max-height: 3; color: $text-muted; }
+    #watch_scroll, #global_scroll { height: 1fr; background: $surface; }
+    #watch_rows, #global_rows { height: auto; background: $surface; }
     WatchRow {
         height: 1; width: 100%; background: $surface;
         color: $foreground;
@@ -107,7 +111,6 @@ class DebuggerApp(App):
         # Return history nodes must survive frame exit and subsequent refreshes.
         self._stack_branch = None
         self._return_branch = None
-        self._globals_branch = None
         self._return_caller_nodes = {}
         self._return_edge_nodes = {}
         self.transport = GdbTransport(gdb)
@@ -134,6 +137,8 @@ class DebuggerApp(App):
         self._last_return: ReturnObservation | None = None
         self._rendered_theme: str | None = None
         self._watch_rows: dict[str, WatchRow] = {}
+        self._global_rows: dict[str, WatchRow] = {}
+        self.visible_views = set(VIEWS)
         self._connected = False
         self._log_lines: deque[str] = deque(maxlen=500)
 
@@ -143,18 +148,54 @@ class DebuggerApp(App):
             with Vertical(id='left'):
                 with VerticalScroll(id='source_scroll'):
                     yield Static('Connecting to GDB...', id='source')
-                yield Static('s:into  n:next  i:instruction  Space:repeat  j/k:cursor  b:break', id='stepbar')
             with Vertical(id='right'):
                 yield ScopeTree('cpu0 / observed call stack', id='scope')
                 with Vertical(id='watch_panel'):
-                    yield Static('WATCHES  ·  hover history / click to copy', id='watch_heading')
-                    yield Static('Locals & globals appear when GDB stops.', id='watch_status')
+                    yield Static('IMMEDIATE SCOPE · executing frame', id='watch_heading')
+                    yield Static('Locals and arguments appear when GDB stops.', id='watch_status')
                     with VerticalScroll(id='watch_scroll'):
                         yield Vertical(id='watch_rows')
+                with Vertical(id='global_panel'):
+                    yield Static('GLOBALS · hover history / click to copy', id='global_heading')
+                    yield Static('Globals appear when GDB stops.', id='global_status')
+                    with VerticalScroll(id='global_scroll'):
+                        yield Vertical(id='global_rows')
+        yield Static('s:into  n:next  i:instruction  Space:repeat  Ctrl+P:views', id='stepbar')
         with Vertical(id='console_panel'):
             yield RichLog(id='console', highlight=True, markup=False)
             yield Input(id='gdb_input', placeholder=': GDB console command (paste and press Enter)')
         yield Footer()
+
+    def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
+        yield from super().get_system_commands(screen)
+        yield SystemCommand('Views', 'Choose visible panes with checkboxes',
+                            self.action_choose_views)
+        for key, (label, _) in VIEWS.items():
+            enabled = key in self.visible_views
+            yield SystemCommand(
+                f'{"✓" if enabled else "☐"} View: {label}',
+                f'{"Hide" if enabled else "Show"} {label}',
+                partial(self.action_toggle_view, key))
+
+    def action_choose_views(self) -> None:
+        self.push_screen(ViewsScreen(self.visible_views))
+
+    def action_toggle_view(self, key: str) -> None:
+        self.set_visible_views(self.visible_views ^ {key})
+
+    def set_visible_views(self, enabled: set[str]) -> None:
+        self.visible_views = enabled & VIEWS.keys()
+        # Look in the base screen even while the checkbox dialog is active.
+        base = self.default_screen
+        for key, (_, selector) in VIEWS.items():
+            base.query_one(selector).display = key in self.visible_views
+        source = 'source' in self.visible_views
+        right = bool(self.visible_views & {'tree', 'immediate', 'globals'})
+        base.query_one('#left').display = source
+        base.query_one('#right').display = right
+        base.query_one('#left').styles.width = '63%' if right else '100%'
+        base.query_one('#right').styles.width = '37%' if source else '100%'
+        base.query_one('#workbench').display = source or right
 
     def on_mount(self) -> None:
         self.query_one('#scope', ScopeTree).return_tooltip = self._return_tooltip
@@ -389,6 +430,7 @@ class DebuggerApp(App):
                                        str(level): list(values)
                                        for level, values in args.items()})
                 self._show_scope()
+                self._show_watches()
         elif purpose == 'vars' and level is not None:
             variables = record.payload.get('variables', [])
             if not isinstance(variables, list):
@@ -541,10 +583,8 @@ class DebuggerApp(App):
         if self._return_branch is None:
             self._return_branch = tree.root.add('↩ observed returns (0)')
             self._stack_branch = tree.root.add('▶ active call stack')
-            self._globals_branch = tree.root.add('◆ globals')
             self._return_branch.expand()
             self._stack_branch.expand()
-            self._globals_branch.expand()
 
         # Return nodes are created ONCE per (thread, caller, callee) edge.
         # Keeping them in the tree preserves hover and selection across rapid
@@ -578,51 +618,60 @@ class DebuggerApp(App):
             )
             for watch in sorted(self.model.active_watches(frame.level), key=lambda w: w.name):
                 node.add_leaf(f'{watch.name} = {watch.value}' + (' ◆' if watch.changed else ''))
+            for series in self._returns.for_caller(
+                    thread=self._active_thread or 'unknown', caller=frame.function):
+                node.add_leaf(Text(series.label, style='bold'), data=series.key)
             node.expand()
             parent = node
 
-        self._globals_branch.remove_children()
-        globals_now = sorted(self.model.active_globals(), key=lambda watch: watch.label)
-        self._globals_branch.set_label(f'◆ globals ({len(globals_now)})')
-        for watch in globals_now:
-            self._globals_branch.add_leaf(
-                f'{watch.label} = {watch.value}' + (' ●' if watch.changed else ''))
         tree.root.expand()
-        self._stack_branch.expand()
-        self._return_branch.expand()
-        self._globals_branch.expand()
 
-    def _show_watches(self) -> None:
-        watches = (sorted(self.model.active_globals(), key=lambda w: w.label)
-                   + sorted(self.model.active_watches(), key=lambda w: (w.frame_level, w.label)))
-        container = self.query_one('#watch_rows', Vertical)
-        current: dict[str, object] = {}
+    def _sync_watch_rows(self, watches: list[Watch], selector: str,
+                         rows: dict[str, WatchRow]) -> None:
+        container = self.query_one(selector, Vertical)
+        current: set[str] = set()
         for watch in watches:
             key = (f'global:{watch.symbol_id}' if watch.frame_level == -1 else
                    f'local:{watch.frame_level}:{watch.generation}:{watch.symbol_id}')
-            current[key] = watch
-            row = self._watch_rows.get(key)
+            current.add(key)
+            row = rows.get(key)
             if row is None:
                 row = WatchRow(watch)
-                self._watch_rows[key] = row
+                rows[key] = row
                 container.mount(row)
             else:
                 row.set_watch(watch)
-        for key in list(self._watch_rows):
+        for key in list(rows):
             if key not in current:
-                self._watch_rows.pop(key).remove()
+                rows.pop(key).remove()
+
+    def _show_watches(self) -> None:
+        # Immediate means the executing frame, independent of source browsing.
+        watches = sorted(self.model.active_watches(0), key=lambda w: w.label)
+        self._sync_watch_rows(watches, '#watch_rows', self._watch_rows)
+        frame = next((frame for frame in self.model.frames if frame.level == 0), None)
+        self.query_one('#watch_heading', Static).update(
+            f'IMMEDIATE SCOPE · {display_call(frame) if frame else "no active frame"}')
         warning = ''
         if self._watches_error:
             warning = f'GDB locals: {self._watches_error}'
-        elif self._globals_error:
-            warning = f'Global discovery: {self._globals_error}'
-        elif self._globals_truncated:
-            warning = f'Globals limited to {MAX_GLOBAL_WATCHES}; selection planned'
-        elif not watches and not self._watch_results:
+        elif frame and 0 not in self._watch_results:
             warning = 'Loading debugger-stop variables…'
         elif not watches:
             warning = 'No variables currently visible at this PC'
         self.query_one('#watch_status', Static).update(warning)
+        globals_now = sorted(self.model.active_globals(), key=lambda w: w.label)
+        self._sync_watch_rows(globals_now, '#global_rows', self._global_rows)
+        warning = ''
+        if self._globals_error:
+            warning = f'Global discovery: {self._globals_error}'
+        elif self._globals_truncated:
+            warning = f'Globals limited to {MAX_GLOBAL_WATCHES}; selection planned'
+        elif not self._globals_discovered:
+            warning = 'Discovering globals…'
+        elif not globals_now:
+            warning = 'No debug globals available'
+        self.query_one('#global_status', Static).update(warning)
 
     def _step(self, command: str) -> None:
         if self.status != 'HALTED':
@@ -743,6 +792,7 @@ class DebuggerApp(App):
         self._copy('\n'.join(self._log_lines), 'debugger log')
 
     def action_focus_console(self) -> None:
+        self.set_visible_views(self.visible_views | {'console'})
         self.query_one('#gdb_input', Input).focus()
 
     def action_focus_source(self) -> None:

@@ -6,6 +6,12 @@ A stylish, fast, keyboard-first source debugger for Cortex-M firmware in QEMU. C
 
 ## Canonical scope graph
 
+The palette offers checkmarked view toggles and a multi-select Views dialog.
+Source, stack tree with persistent observed returns, immediate scope watches
+(executing frame 0), globals and console are independently visible for a session.
+Source browsing does not change the immediate watch's scope. View visibility
+does not control debugger execution or history collection.
+
 CPU -> thread/task/exception context -> call invocation -> lexical scope -> symbol. Two projections: active call tree and aggregate call tree. Symbol identity should incorporate build ID, compilation unit, DWARF DIE or code ranges; locals add lexical declaration identity; instances add task/thread and invocation. Human display defaults to `function.local`. Recursion and shadowed names must be distinguishable. Frame number is *not* a permanent identity. Calls between debugger stops cannot always be observed without trace.
 
 Watches retain a bounded (initially 128) sample history, time axis by stop sequence, not clock time. Show value delta and optional Unicode sparklines. Later: pin expressions, expand struct/array, snapshot review, and globals.
