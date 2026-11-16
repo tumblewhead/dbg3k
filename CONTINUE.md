@@ -1,13 +1,58 @@
 # dbg3k: development history and continuation
 
 **Repository:** https://github.com/tumblewhead/dbg3k
-**Working branch:** `feature/graphical-resource-views` (based on PR #5's branch)
-**Review:** https://github.com/tumblewhead/dbg3k/pull/6 (draft, stacked on PR #5)
-**Current stage:** Graphical stack map/raw bytes, sortable whole-run instruction/call-proxy Pareto and energy ranking; 53 local tests and source CI pass, including actual QEMU/GDB.
+**Working branch:** `fix/energy-history-updates` (based on PR #6's branch)
+**Review:** New energy reliability PR pending; preceding graphical work is PR #6.
+**Current stage:** Incremental JSONL profiling, sticky build-matched energy assumptions and transient-IO recovery; 61 local checks pass including real GDB/QEMU, review CI pending.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
+
+### 2026-11-16: energy ranking reliability and JSONL updates
+
+User reports unreliable energy ranking and suggests JSONL as the update source.
+Read-only inspection of the local history confirmed a missing configuration in
+the latest session: recorded instruction profiles were present, but no energy
+model. A preceding matching-build session contained the explicit assumptions
+48 µA/MHz, 1 MIPS/MHz, 1.8 V. The previous UI cleared its table when assumptions
+were missing, and also cleared valid data after transient profile reads failed.
+
+Live snapshots now validate through a separate collector, append cumulative
+profile events, and drive rankings via an incremental current-session JSONL
+reader. Startup restores only explicit recorded assumptions bound to the same
+ELF hash; CLI and Model… changes override recovery/replay. The energy pane has a
+Model button, keeps measured rows visible without a model, and labels numeric
+energy unavailable until assumptions exist. Temporary missing/partial profile
+files and failed reads retain last validated data with provenance/status. Wrong
+build/counter data is rejected. Recording failure closes its writer and falls
+back to validated live data.
+
+Added --profile-history/--profile-session for explicitly following recorded or
+growing profile logs. Reader buffers partial UTF-8/JSON, skips malformed lines,
+detects rotation/truncation (including same-inode rewrites), and consumes bounded
+appended batches. Session/build/run/sequence checks and cumulative replacement
+avoid mixed sessions and double counts. Replay does not silently borrow another
+session's assumptions. Legacy profiles without entry hits show unavailable call
+counts. Session/model events now carry build hashes and source provenance.
+Trace reopening/export also tolerates interrupted UTF-8 fragments; failed closes
+release the file handle.
+
+Read-only replay of the earlier real session populated six rows from 1152
+recorded dispatches and restored its explicit model, without any plugin snapshot
+or debugger connection in the harness. Estimated run energy under that model was
+99532.8 pJ (a calculation, not a physical measurement). New tests cover growing
+files, partial lines, model restoration/CLI precedence, session changes, invalid
+hash/counters, legacy entry data, transient IO and simulated disk-full fallback.
+An old test's expectation that missing models erase all rows was updated for the
+new behavior; a headless test exited before its UI settled and was corrected to
+await the pilot. All 61 checks pass including actual GDB/QEMU; compileall and
+whitespace checks pass. Results are recorded in handoff/energy-history-validation.json.
+
+Next: check the new review CI; pull the fix branch and restart using the existing
+live launch command. Recorded assumptions restore automatically when build-bound
+evidence exists. Optional --profile-history follows saved sessions with explicit
+provenance. User terminal/latest Kodama and long-duration catch-up remain pending.
 
 ### 2026-11-16: graphical resource projections
 

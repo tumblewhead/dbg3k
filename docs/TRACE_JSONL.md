@@ -34,6 +34,15 @@ Every object includes: **schema="dbg3k.trace.v1"**, **kind**, **session**, **seq
 | instruction_profile | ELF SHA256, QEMU run UUID, profile_seq (separate from JSONL envelope seq), total, unknown, complete, exclusive counts and entry_hits by emitted body, origin=qemu-plugin-instruction-dispatch |
 | energy_model | ua_per_mhz, mips_per_mhz, voltage, origin=user-configured-active-core-model |
 
+New session-start and energy-model records also include `elf_sha256` where the
+ELF is available; energy-model `source` describes CLI/user/restored provenance.
+The profiling views incrementally consume active-session profile/model records
+and can explicitly follow a recorded file/session. Old records without entry-hit
+data retain unavailable call metrics. Partial lines, malformed records and
+rotated/truncated files are handled without adding cumulative totals twice.
+Recorded sessions/builds are kept distinct. See the JSONL replay section in
+[RESOURCES.md](RESOURCES.md).
+
 Instruction snapshots are periodic cumulative QEMU-run dispatch counts, not
 stop-synchronized instruction traces. Stack samples are accepted only for the
 current halted stop/thread. Energy model entries record assumptions, not power

@@ -8,7 +8,7 @@ from .resources import CodeCatalog, EnergyModel, FunctionCode, InstructionProfil
 class FunctionStats:
     function: FunctionCode
     instructions: int
-    entries: int
+    entries: int | None
     energy_pj: float | None
     charge_pc: float | None
 
@@ -29,7 +29,7 @@ class FunctionStats:
 
 def function_stats(catalog: CodeCatalog, profile: InstructionProfile,
                    energy: EnergyModel | None = None) -> list[FunctionStats]:
-    return [FunctionStats(f, profile.by_function[f.key], profile.entry_hits[f.key],
+    return [FunctionStats(f, profile.by_function[f.key], profile.entry_hits[f.key] if profile.entries_available else None,
                           energy.energy_pj(profile.by_function[f.key]) if energy else None,
                           energy.charge_pc(profile.by_function[f.key]) if energy else None)
             for f in catalog.functions]

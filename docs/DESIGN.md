@@ -47,6 +47,14 @@ and selected frames use emitted-body identities; aliases are folded. Percentages
 include unknown dispatches in the denominator and energy remains explicitly
 estimated under a common per-instruction model.
 
+The energy/ranking update path is backed by session-scoped JSONL snapshots. Live
+plugin input is validated before recording; incremental replay rebuilds the
+profile and model without summing cumulative counters. Transient I/O failures
+retain last validated data with source diagnostics. Previous explicit model
+assumptions can be restored for a proven matching ELF on live startup. Recorded
+profile replay keeps session identity, uses that session's assumptions or an
+explicit user override, and never derives instruction counts from stop samples.
+
 Per invocation: physical frame contribution, cumulative depth from an identified stack origin, inclusive maximum including callees, and observed maximum stack pointer displacement. Separate call-stack depth (frames) from bytes. Track MSP vs PSP independently, consider interrupts/hardware exception frames, dynamic allocation, recursion, tail calls, inlining, and compiler optimizations. GDB SP differences are estimates; exact maxima require SP tracing, instrumentation, or carefully qualified stack coloring. Mark evidence quality.
 
 ## Instruction attribution and static footprint
