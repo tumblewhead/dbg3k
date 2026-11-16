@@ -118,3 +118,30 @@ GDB stops, not time-series data collected while firmware runs.
 headless theme tests, and headless pane tests run in GitHub Actions.
 A real GDB/QEMU/Arch smoke test is still needed to confirm that
 argument values and finish notifications look right for AN505.
+
+## Persistent caller-return histories and JSONL trace
+
+The scope tree now keeps a **single, persistent return row per thread/caller/callee pair** while the caller is active. For example, after finishing bar from inside foo, the tree can show:
+
+~~~text
+foo(2)
+  ↳ bar(4) ⟵ 12 · 5×
+~~~
+
+Subsequent observed returns from bar into foo replace the displayed value, increment the count, and remain available as history. Hover the return row for the last ten observed returns; **click/select the row to copy all of its current-session returns as TSV**, streaming from the JSONL file rather than the limited in-memory UI cache.
+
+To observe a return value, **step into bar with s and finish it with o**. GDB only emits the return-value notification at an observed function-finished event; ordinary next/step-over does not automatically capture callee return values. Missing return values are shown as unreported, never silently assigned zero.
+
+dbg3k also starts an **append-only JSONL trace** after connecting to GDB. Default path (relative to the directory where you launched dbg3k):
+
+**dbg3k-history/targetname_YYYY-MM-DD.jsonl**
+
+Here targetname is the ELF basename without extension, so debugging Kodama's demo.elf on 2026-11-15 creates **dbg3k-history/demo_2026-11-15.jsonl**. Multiple launches on the same day append into the same file under separate session IDs. All records are flushed immediately, including stop events, frames, arguments, local and global observations, GDB-reported returns and errors.
+
+Choose a different directory:
+
+~~~sh
+dbg3k ~/proj/kodama/build/c-main-arm/demo.elf --history-dir ~/proj/kodama/debug-traces
+~~~
+
+The GDB output pane prints the chosen file location. See [docs/TRACE_JSONL.md](docs/TRACE_JSONL.md) for schema, provenance, retention, and limitations. This captures debugger-observed stops and values, **not every instruction or unobserved call**.
