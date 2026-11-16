@@ -65,7 +65,7 @@ class TraceTests(unittest.TestCase):
             first.close()
             path = Path(folder) / "demo_2026-11-15.jsonl"
             records = [json.loads(line) for line in path.read_text().splitlines()]
-            self.assertEqual(len(records), 26)  # two starts, 23 returns, one end each
+            self.assertEqual(len(records), 27)  # two starts, 23 returns, two ends
             self.assertTrue(all(row["schema"] == SCHEMA for row in records))
             self.assertEqual({row["session"] for row in records}, {"first", "other"})
             self.assertEqual(records[-1]["kind"], "session_end")
