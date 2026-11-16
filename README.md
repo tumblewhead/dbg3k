@@ -13,6 +13,13 @@ repeated `--observe "'kodama.c'::tasks"` flags. Scalars, fields, array elements,
 pointer addresses, read failures and capture limits retain stop/build provenance.
 See [the schema, queries and real Kodama/QEMU demonstration](docs/OBSERVATIONS.md).
 
+**Graphical Kodama view:** Kodama ELFs automatically open a full-width panel
+with task/signal timelines, decoded waits, priorities, scheduler decision boxes
+and coroutine-pool ownership. Click cells to inspect history; expand for a
+lesson view. Configure a signal header and optional API probes in **Kodama setup**.
+Saved sessions can be viewed with `--kodama-history FILE` without starting GDB.
+See [the graphical guide and screenshot](docs/KODAMA_VIEW.md).
+
 ## Getting started on Arch Linux
 
 Install Python 3.11+, make, arm-none-eabi-gcc, qemu-system-arm, GDB with ARM support.

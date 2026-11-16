@@ -30,7 +30,7 @@ class ViewTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             self.assertIsInstance(app.screen, ViewsScreen)
             choices = app.screen.query_one(SelectionList)
-            self.assertEqual(set(choices.selected), set(VIEWS))
+            self.assertEqual(set(choices.selected), set(VIEWS) - {'kodama'})
             # Keyboard toggles the focused Source checkbox without closing.
             choices.focus()
             await pilot.press('space')

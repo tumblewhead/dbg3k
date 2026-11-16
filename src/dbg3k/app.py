@@ -8,6 +8,7 @@ from collections.abc import Iterable
 import queue
 import json
 import time
+from uuid import uuid4
 from datetime import datetime
 from elftools.common.exceptions import ELFError
 from rich.text import Text
@@ -36,6 +37,9 @@ from .graph_model import current_bodies
 from .observations import (select_expressions, decode_message, PREFIX,
                            PROVENANCE_PREFIX, LIMITS)
 from .observation_ui import ObservationsScreen
+from .kodama_model import KodamaHistory, KodamaJournal
+from .kodama_symbols import discover_header, signal_labels
+from .kodama_ui import KodamaPanel, KodamaScreen, KodamaSetup
 
 class DebuggerApp(App):
     TITLE = 'dbg3k'
@@ -54,6 +58,7 @@ class DebuggerApp(App):
     }
     #source { height: auto; padding: 1 2; background: $surface; color: $foreground; }
     #stepbar { height: 3; background: $panel; color: $text-accent; padding: 0 1; }
+    #kodama_panel { height: 45%; min-height: 10; }
     #scope {
         height: 2fr; min-height: 7; border: round $border;
         background: $surface; color: $foreground;
@@ -121,7 +126,9 @@ class DebuggerApp(App):
     def __init__(self, elf: str, gdb: str, remote: str,
                  history_dir: str = "dbg3k-history", instruction_profile: str | None = None,
                  energy_model: EnergyModel | None = None, profile_history: str | None = None,
-                 profile_session: str | None = None, observations=()) -> None:
+                 profile_session: str | None = None, observations=(), kodama: bool | None = None,
+                 kodama_header: str | None = None, kodama_probes: bool = True,
+                 kodama_log: str | None = None, kodama_session: str | None = None) -> None:
         super().__init__()
         self.elf, self.remote = elf, remote
         self.history_dir = history_dir
@@ -153,6 +160,31 @@ class DebuggerApp(App):
         except (OSError, ValueError, ELFError) as exc:
             self.catalog = None
             self._catalog_error = str(exc)
+        detected = self.catalog and any(name.startswith('kodama_run_one')
+            for f in self.catalog.functions for name in f.names)
+        self.kodama_enabled = bool(detected) if kodama is None else kodama
+        self.kodama_log = Path(kodama_log).expanduser() if kodama_log else None
+        if self.kodama_log:
+            self.kodama_enabled = True
+        self.kodama_probes = kodama_probes
+        self.kodama_header = kodama_header or (discover_header(elf) if detected or kodama else None)
+        self.kodama_history = KodamaHistory()
+        self._kodama_reader = JsonlTail(self.kodama_log) if self.kodama_log else None
+        self._kodama_journal = KodamaJournal(self.catalog.sha256, self.kodama_history, kodama_session) if self.kodama_log and self.catalog else None
+        self._kodama_reader_generation = 0
+        try:
+            self.kodama_history.labels = signal_labels(self.kodama_header)
+        except (OSError, ValueError, UnicodeError) as exc:
+            self.kodama_history.diagnostic = f'Signal header: {exc}'
+        self._kodama_started = self.kodama_enabled
+        self._kodama_capture = uuid4().hex
+        self.kodama_history.capture = self._kodama_capture
+        self._kodama_ready = False
+        self._kodama_loading = False
+        self._kodama_config_pending = True
+        self._kodama_controls = {}
+        self._kodama_last_stop = None
+        self._kodama_dirty = False
         if self.profile_history_path:
             self._count_status = 'Waiting for matching JSONL instruction profile records.'
             if self.catalog:
@@ -204,6 +236,8 @@ class DebuggerApp(App):
         self._watch_rows: dict[str, WatchRow] = {}
         self._global_rows: dict[str, WatchRow] = {}
         self.visible_views = set(VIEWS)
+        if not self.kodama_enabled:
+            self.visible_views.discard('kodama')
         self._connected = False
         self._log_lines: deque[str] = deque(maxlen=500)
 
@@ -240,6 +274,7 @@ class DebuggerApp(App):
                 with VerticalScroll(id='energy_graph_panel', classes='graph-panel'):
                     yield Static('ENERGY RANKING · ESTIMATE', classes='resource-title')
                     yield RunRanking(energy=True, id='energy_graph_content')
+        yield KodamaPanel(self.kodama_history, id='kodama_panel')
         yield Static('s:into  n:next  i:instruction  Space:repeat  Ctrl+P:views', id='stepbar')
         with Vertical(id='console_panel'):
             yield RichLog(id='console', highlight=True, markup=False)
@@ -254,6 +289,8 @@ class DebuggerApp(App):
                             self.action_energy_model)
         yield SystemCommand('Observation capture', 'Select expressions; start/stop structured JSONL capture',
                             self.action_observation_capture)
+        yield SystemCommand('Kodama setup', 'Signal header and API probes for graphical scheduler state', self.action_kodama_setup)
+        yield SystemCommand('Kodama expanded view', 'Open the full-width scheduler timeline and pool map', self.action_kodama_expand)
         for key, (label, _) in VIEWS.items():
             enabled = key in self.visible_views
             yield SystemCommand(
@@ -273,6 +310,104 @@ class DebuggerApp(App):
 
     def action_observation_capture(self) -> None:
         self.push_screen(ObservationsScreen())
+
+    def action_kodama_setup(self) -> None:
+        self.push_screen(KodamaSetup())
+
+    def action_kodama_expand(self) -> None:
+        self.set_visible_views(self.visible_views | {'kodama'})
+        if not isinstance(self.screen, KodamaScreen):
+            self.push_screen(KodamaScreen())
+
+    def configure_kodama(self, enabled, header, probes=True) -> None:
+        if self.kodama_log:
+            raise ValueError('Recorded view: restart without --kodama-history for live capture')
+        labels = signal_labels(header) if enabled else self.kodama_history.labels
+        self.kodama_enabled, self.kodama_probes = enabled, probes
+        if enabled:
+            self.kodama_header = header
+            self._kodama_capture = uuid4().hex
+            self.kodama_history.reset(self._kodama_capture)
+            self.kodama_history.labels = labels
+            self._kodama_started = True
+        self._kodama_config_pending = True
+        self._kodama_last_stop = None
+        self._trace_record('kodama_config', capture=self._kodama_capture, enabled=enabled,
+            probes=probes, signal_labels=labels, origin='user-selected-kodama-adapter')
+        self._ensure_kodama()
+        self._show_kodama()
+
+    def _show_kodama(self) -> None:
+        self._kodama_dirty = False
+        screens = [self.default_screen]
+        if self.screen is not self.default_screen:
+            screens.append(self.screen)
+        for screen in screens:
+            for panel in screen.query(KodamaPanel):
+                status = self.status
+                if self._kodama_config_pending and self._connected:
+                    status += ' · capture change pending at halted stop'
+                if self.kodama_log:
+                    status = f'RECORDED session {self._kodama_journal.selected if self._kodama_journal else "unavailable"}'
+                    if self._kodama_reader.backlog:
+                        status += f' · catching up {self._kodama_reader.backlog} bytes'
+                panel.redraw(status, self.kodama_history.coverage.get('enabled', False) and not self.kodama_log)
+
+    def _poll_kodama_journal(self) -> None:
+        if not self._kodama_reader or not self._kodama_journal:
+            return
+        try:
+            records = self._kodama_reader.poll()
+            if self._kodama_reader_generation != self._kodama_reader.generation:
+                self._kodama_journal = KodamaJournal(self.catalog.sha256, self.kodama_history, self._kodama_journal.session)
+                self.kodama_history.reset(None)
+                self._kodama_reader_generation = self._kodama_reader.generation
+            for record in records:
+                self._kodama_journal.apply(record)
+            self._show_kodama()
+        except OSError as exc:
+            self.kodama_history.diagnostic = f'Journal read failed: {exc}'
+            self._show_kodama()
+
+    def _ensure_kodama(self) -> None:
+        if not self._connected or self.status != 'HALTED':
+            return
+        if not self._kodama_ready:
+            if not self.kodama_enabled or self._kodama_loading:
+                return
+            self._kodama_loading = True
+            helper = str(Path(__file__).with_name('gdb_kodama.py').resolve())
+            code = (f'python _dbg3k_kodama_ns={{"__file__": {helper!r}}}; '
+                    f'exec(compile(open({helper!r}).read(), {helper!r}, "exec"), _dbg3k_kodama_ns); '
+                    'dbg3k_kodama_control=_dbg3k_kodama_ns["dbg3k_kodama_control"]; '
+                    'dbg3k_kodama_snapshot=_dbg3k_kodama_ns["dbg3k_kodama_snapshot"]')
+            self._send(f'-interpreter-exec console "{self._quoted(code)}"', 'kodama_observer')
+            return
+        if self._kodama_config_pending:
+            logicals = ['kodama_spawn', 'kodama_spawn_policy', 'kodama_cancel', 'kodama_wake',
+                'kodama_run_one', 'kodama_yield', 'kodama_pend', 'kodama_signal', 'kodama_signal_from_isr',
+                'kodama_signal_and_pend', 'kodama_signal_and_yield', 'kodama_level_set',
+                'kodama_sleep', 'kodama_time_advance', 'kodama_job_begin', 'kodama_job_complete',
+                'signal_locked', 'resume_command', 'frame_alloc', 'frame_free']
+            all_names = [n for f in self.catalog.functions for n in f.names] if self.catalog else []
+            symbols = [(logical, next((n for n in all_names if n == logical or n.startswith(logical + '__')), logical))
+                       for logical in logicals]
+            config = (self._kodama_capture, self.kodama_enabled, self.kodama_probes)
+            if config in self._kodama_controls.values():
+                return
+            code = f'python dbg3k_kodama_control({self.kodama_enabled!r}, {self.kodama_probes!r}, {self._kodama_capture!r}, {self.model.stop}, {symbols!r})'
+            token = self._send(f'-interpreter-exec console "{self._quoted(code)}"', 'kodama_control')
+            if token is not None:
+                self._kodama_controls[token] = config
+        else:
+            self._request_kodama()
+
+    def _request_kodama(self) -> None:
+        key = (self._kodama_capture, self.model.stop)
+        if (self.kodama_enabled and self._kodama_ready and self.status == 'HALTED'
+                and not self._kodama_config_pending and self._kodama_last_stop != key):
+            self._kodama_last_stop = key
+            self._send(f'-interpreter-exec console "python dbg3k_kodama_snapshot({self.model.stop})"', 'kodama_snapshot')
 
     def set_observations(self, expressions, enabled=True) -> None:
         self.observation_expressions = select_expressions(expressions)
@@ -295,14 +430,25 @@ class DebuggerApp(App):
         for key, (_, selector) in VIEWS.items():
             base.query_one(selector).display = key in self.visible_views
         source = 'source' in self.visible_views
-        right = bool(self.visible_views - {'source', 'console'})
+        right = bool(self.visible_views - {'source', 'console', 'kodama'})
         base.query_one('#left').display = source
         base.query_one('#right').display = right
         base.query_one('#left').styles.width = '63%' if right else '100%'
         base.query_one('#right').styles.width = '37%' if source else '100%'
         base.query_one('#workbench').display = source or right
+        base.query_one('#kodama_panel').styles.height = '45%' if source or right else '1fr'
+        if 'kodama' in self.visible_views and not self._kodama_started:
+            self.configure_kodama(True, self.kodama_header, self.kodama_probes)
 
     def on_mount(self) -> None:
+        self.set_visible_views(self.visible_views)
+        if self.kodama_log:
+            self.status = 'REPLAY'
+            self.set_visible_views({'kodama'})
+            self._poll_kodama_journal()
+            self.query_one('#stepbar', Static).update('Recorded Kodama · click timelines / Left–Right: scrub · End: latest · GDB is not started')
+            self.set_interval(0.1, self._poll)
+            return
         self.query_one('#scope', ScopeTree).return_tooltip = self._return_tooltip
         if self.catalog and self.energy_model is None and not self.profile_history_path:
             prefix = trace_filename(self.elf, datetime.now()).rsplit('_', 1)[0]
@@ -397,7 +543,7 @@ class DebuggerApp(App):
             token = self.transport.send(command)
             self.pending[token] = (purpose, level)
             if purpose in ('frames', 'vars', 'args', 'global_value', 'thread_info',
-                           'stack_snapshot', 'observation_capture'):
+                           'stack_snapshot', 'observation_capture', 'kodama_snapshot'):
                 self._result_context[token] = (self.model.stop, self._active_thread)
             if purpose in ('execution', 'console', 'break_add', 'break_del'):
                 self._trace_record('command', stop=self.model.stop,
@@ -408,12 +554,16 @@ class DebuggerApp(App):
             self._log(f'GDB send failed: {exc}')
 
     def _poll(self) -> None:
+        if not self.is_running:
+            return  # Timers can drain while Textual is closing its screens.
         for _ in range(300):
             try:
                 record = self.transport.events.get_nowait()
             except queue.Empty:
                 break
             self._handle(record)
+        if self._kodama_dirty:
+            self._show_kodama()
         if self.theme != self._rendered_theme:
             # Textual repaints CSS variables automatically; Rich Text needs a
             # fresh rendering because its styles are snapshots, not CSS.
@@ -421,10 +571,12 @@ class DebuggerApp(App):
             self._show_source()
             self._show_watches()
             self._show_resources()
+            self._show_kodama()
         if time.monotonic() - self._resource_poll_time >= .25:
             self._resource_poll_time = time.monotonic()
             self._poll_instruction_profile()
             self._poll_profile_history()
+            self._poll_kodama_journal()
 
     def set_energy_model(self, model: EnergyModel, *, source='User-configured assumptions', override=True) -> None:
         self.energy_model = model
@@ -611,6 +763,17 @@ class DebuggerApp(App):
     def _handle(self, record: Record) -> None:
         if record.kind in ('~', '@', '&'):
             message = str(record.payload).strip()
+            if record.kind == '~' and message.startswith('__dbg3k_kodama_v1__'):
+                data = decode_message(message, '__dbg3k_kodama_v1__')
+                if data is not None and data.get('capture') == self._kodama_capture:
+                    stale = data.get('origin') == 'stop' and (data.get('stop') != self.model.stop or
+                        self.status not in ('HALTED', 'COMMANDING'))
+                    if not stale and self.kodama_history.accept(data):
+                        kind = 'kodama_sample' if 'state' in data else 'kodama_coverage' if 'coverage' in data else 'kodama_diagnostic'
+                        self._trace_record(kind, stop=data.get('stop', self.model.stop),
+                            origin='gdb-python-kodama-adapter', data=data)
+                        self._kodama_dirty = True
+                return
             if record.kind == '~' and message.startswith(PREFIX):
                 data = decode_message(message)
                 if data is not None:
@@ -650,6 +813,7 @@ class DebuggerApp(App):
             self.status = 'RUNNING'
             self._show_status()
             self._show_resources()
+            self._show_kodama()
             return
         if record.kind == '*' and record.cls == 'stopped':
             old_top = self.model.frames[0] if self.model.frames else None
@@ -689,6 +853,7 @@ class DebuggerApp(App):
         if record.kind != '^':
             return
         purpose, level = self.pending.pop(record.token, ('unknown', None))
+        kodama_control = self._kodama_controls.pop(record.token, None)
         context = self._result_context.pop(record.token, None)
         if purpose == 'observation_capture':
             self._finish_observation_request(record.token, record.payload.get('msg') if record.cls == 'error' else None)
@@ -703,6 +868,10 @@ class DebuggerApp(App):
             self._log(f'{purpose}: {record.payload.get("msg", "GDB error")}')
             self._trace_record('gdb_error', stop=self.model.stop, purpose=purpose,
                                message=record.payload.get('msg', 'GDB error'))
+            if purpose.startswith('kodama_'):
+                self.kodama_history.diagnostic = str(record.payload.get('msg', 'Kodama GDB query failed'))
+                self._kodama_loading = False
+                self._show_kodama()
             if purpose == 'return_observer':
                 self._log('Automatic returns unavailable (GDB Python required); use o / finish to observe returns.')
             if purpose == 'observation_observer':
@@ -773,6 +942,10 @@ class DebuggerApp(App):
                     'dbg3k_observe=_dbg3k_obs_ns["dbg3k_observe"]; '
                     'dbg3k_provenance=_dbg3k_obs_ns["dbg3k_provenance"]; dbg3k_provenance()')
             self._send(f'-interpreter-exec console "{self._quoted(code)}"', 'observation_observer')
+            self._trace_record('kodama_config', capture=self._kodama_capture,
+                enabled=self.kodama_enabled, probes=self.kodama_probes,
+                signal_labels=self.kodama_history.labels, origin='elf-detection-or-cli')
+            self._ensure_kodama()
             if self.energy_model:
                 self.set_energy_model(self.energy_model, source=self._energy_source, override=self._energy_override)
         elif purpose == 'stack_observer':
@@ -781,6 +954,16 @@ class DebuggerApp(App):
         elif purpose == 'observation_observer':
             self._observation_ready = True
             self._request_observations()
+        elif purpose == 'kodama_observer':
+            self._kodama_loading = False
+            self._kodama_ready = True
+            self._ensure_kodama()
+        elif purpose == 'kodama_control':
+            if kodama_control == (self._kodama_capture, self.kodama_enabled, self.kodama_probes):
+                self._kodama_config_pending = False
+                self._request_kodama()
+            else:
+                self._ensure_kodama()
         elif purpose == 'return_observer':
             self._log('Automatic returns: tracking debug-visible functions encountered at stops.')
         elif purpose == 'thread_info':
@@ -895,6 +1078,7 @@ class DebuggerApp(App):
         self._send(frame_command, 'frames')
         self._request_stack()
         self._request_observations()
+        self._ensure_kodama()
         self._show_status()
 
     def _show_status(self) -> None:
@@ -1217,6 +1401,9 @@ class DebuggerApp(App):
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id != 'gdb_input':
+            return
+        if self.kodama_log:
+            self.notify('Recorded Kodama view has no live GDB connection', severity='warning')
             return
         command = event.value.strip()
         if command:
