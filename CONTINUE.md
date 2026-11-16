@@ -44,6 +44,14 @@ Feature branch `feature/m0-1-mi-textual-scope-001` created. Python GDB/MI parser
 - Preserve selecting source via the active call tree.
 - Pure-Python tests/compileall pass locally; Textual/GDB/QEMU runtime was unavailable in the builder and must be retested on SaltyPond.
 
+### 2026-11-15: GDB thread ID and copy/paste bugfix (pending Arch retest)
+
+**Live user error, root cause confirmed:** Watches displayed `Cannot specify --frame without --thread`. GDB/MI requires a thread context for any command using `--frame`. Earlier request `-stack-list-variables --frame N --all-values` was rejected; this is not evidence that the function has no locals. The patch now discovers the selected/stopped GDB thread using `-thread-info` and `*stopped.thread-id`, and requests `-stack-list-variables --thread T --frame N --all-values`. A small pure helper module validates these arguments; 15 unit tests (including 5 new thread/command tests) passed locally. Actual GDB+QEMU retest is still required.
+
+**Live user complaint:** Cannot copy/paste any text from TUI. Textual supports drag-selection + Ctrl+C in many widgets, though terminal mouse interception differs. The patch adds `y` for selected source line/scope node, `Y` for source file, `W` for watches, `L` for GDB log (bounded to 500 lines); all use Textual OSC52 clipboard copy. Adds an editable GDB command input, focused by `F2` (or `:` if supported), accepting pasted GDB commands and executing via `-interpreter-exec console`. Esc leaves the input. Requires user test for keyboard focus and terminal clipboard support. Fallback is Shift+drag with the terminal's selection/copy.
+
+**Test on SaltyPond:** restart QEMU in debug mode; pull branch, reinstall editable package if necessary, start dbg3k, step naturally from Reset_Handler to main and into foo/bar. Verify watches update when in scope and keyboard copy actions. Use `F2`, enter `info registers`, confirm output appears and `L` copies it. If Clipboard OSC52 fails, report terminal emulator and whether `wl-paste` gets data.
+
 ## Resuming on the user's Arch Linux workstation
 
 ```sh
@@ -66,8 +74,9 @@ Terminal 2: `dbg3k examples/an505/firmware.elf`
 - [ ] Mouse wheel and PageUp/Down can reach beginning/end of file and do **not** advance PC.
 - [ ] Click function in call tree to view source without running firmware.
 - [ ] Step through startup loops and into `main()`, then `foo()` and `bar()` using `n/s/Space`; no automatic skip.
-- [ ] Check locals populate watches once symbols are in scope, including `main.n`, `foo.n`, `bar.result`; histories update across stops.
-- [ ] If not, capture watch-pane message, GDB MI response to `-stack-list-variables --frame 0 --all-values`, GDB/Textual versions, current PC/function and console log.
+- [ ] Verify explicit GDB thread-qualified requests succeed and locals populate watches once in scope, including `main.n`, `foo.n`, `bar.result`; histories update across stops.
+- [ ] If not, capture watch-pane error and GDB MI response to `-thread-info` and `-stack-list-variables --thread T --frame 0 --all-values`, GDB/Textual versions, PC and console log.
+- [ ] Verify y/Y/W/L copy commands, F2 input, paste and Enter, Escape to resume key stepping.
 
 ## Next engineering steps
 
