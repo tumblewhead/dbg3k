@@ -78,6 +78,14 @@ Feature branch `feature/m0-1-mi-textual-scope-001` created. Python GDB/MI parser
 
 **Known bounds:** GDB must have meaningful debug arguments; optimized-out parameters show `?` or GDB unavailable values. Returns are only shown when GDB reports `function-finished`, not for arbitrary called functions. Clipboard depends on the terminal OSC52 integration. 4096 observations per symbol is a host UI cap, not an embedded RAM budget; earlier values are evicted.
 
+### 2026-11-15: Arch crash report: Rich MissingStyle on source PC highlight
+
+**User-provided traceback:** Opening dbg3k against `~/proj/kodama/build/c-main-arm/demo.elf` halted in `Reset_Handler` at `0x380000dc`. GDB returned a valid stack frame for `/home/easy/proj/kodama/examples/c-main/arm/startup.c:22`. During `_show_source()`, the highlighted execution line was styled using `f'bold {theme.background} on {theme.success}'`, but the built-in `textual-dark` theme reports `theme.background=None`. Rich therefore raised `MissingStyle: Failed to get style 'bold None on #4EBF71'`. This is a theme-rendering bug, not an ARM/GDB or Kodama startup failure.
+
+**Fix:** Use only a defined highlight color (`theme.success` or a defensive fallback), and compute a WCAG-luminance-based contrasting black/white foreground for the Rich execution-line span. Do not interpolate optional theme color fields into Rich styles. The regression test constructs an actual 28-line `startup.c` in a temporary directory, feeds a `frames` MI result at line 22 through the `DebuggerApp._handle()` path, and verifies dark and light themes render without crashing. The earlier headless theme test missed this because no source frame had been loaded.
+
+**Validation:** GitHub CI must be green at the latest commit (check post-documentation). A live retest against the user's Kodama QEMU session remains to be done. Keep the frame/scope/watch features unchanged in this hotfix.
+
 ## Resuming on the user's Arch Linux workstation
 
 ```sh
