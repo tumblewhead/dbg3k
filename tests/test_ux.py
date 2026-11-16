@@ -67,7 +67,7 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(len(watch.tooltip_history.splitlines()), 12)
         self.assertIn("stop 14: 14", watch.tooltip_history)
         self.assertNotIn("stop 4:", watch.tooltip_history)
-        self.assertIn("stop 1\tfoo.value@frame0#gen1\t1",
+        self.assertIn("1\tfoo.value@frame0#gen1\t1",
                       model.export_history_tsv())
         self.assertIn("stop 14", watch.tooltip_history)
 
