@@ -5,24 +5,27 @@
   "canonical_branch": "main",
   "working_branch": "feature/m0-1-mi-textual-scope-001",
   "milestone": "M0.1",
-  "status": "SOURCE_SCROLL_PATCHED_WATCH_DIAGNOSTICS_PENDING_ARCH_RETEST",
+  "status": "THREAD_WATCH_QUERY_FIXED_CLIPBOARD_UI_ADDED_PENDING_ARCH_TEST",
   "validated": [
     "User reports Textual TUI launches",
     "User reports clicking a scope-tree function shows source",
     "Ten MI parser and scope-model unit tests in builder",
-    "Python compileall in builder"
+    "Python compileall in builder",
+    "15 pure-Python MI/parser/model/thread-command tests pass in builder"
   ],
   "unvalidated": [
     "Live Textual VerticalScroll behavior on Arch",
     "Actual GDB/MI local-variable results and watch updates",
-    "QEMU AN505 example build/run in builder"
+    "QEMU AN505 example build/run in builder",
+    "Thread discovery + watches on user's actual QEMU/GDB",
+    "Textual OSC52 clipboard with user's terminal, keyboard focus, and CLI input"
   ],
   "next": [
-    "Run Arch/QEMU smoke test for mouse and keyboard source scrolling without PC movement",
-    "Step naturally from Reset_Handler to main, foo, bar (never auto-skip startup)",
-    "Verify local-watch results at each stop; collect MI result, version and error if still absent",
-    "Add repeatable fake-GDB tests and independent source-function navigator",
-    "Add assembly/register panels, static .text sizes, stack contribution and QEMU TCG counters"
+    "User retest on Arch: pull branch, debug AN505, step from Reset_Handler into main/foo/bar, confirm watches",
+    "Test mouse drag Ctrl+C, y line, Y full source, W tab-separated watches, L console transcript, F2/: CLI input/paste",
+    "If watch error persists capture GDB MI -thread-info and -stack-list-variables --thread T --frame N --all-values and user terminal info",
+    "Add integration simulator tests for asynchronous stop/thread/frame/vars replies and Textual command input focus",
+    "Continue with independent source navigator, assembly/register panels, and QEMU TCG instruction counters"
   ],
   "decisions": [
     "Scope tree canonical",
@@ -46,12 +49,13 @@
     "docs/DESIGN.md",
     "docs/CONVERSATION_NOTES.md"
   ],
-  "summary": "User confirmed first TUI launch and function selection. Fixed source excerpt by rendering full file in VerticalScroll; made GDB locals requests and failures explicit. Pending end-to-end retest.",
+  "summary": "After real GDB error 'Cannot specify --frame without --thread', added thread-info/current-thread discovery and thread-qualified locals queries. Added y/Y/W/L clipboard actions and F2/: GDB CLI input.",
   "known_issues": {
     "reported": [
       "Source stuck displaying ~20-33 lines",
-      "Local watches never appear"
+      "Local watches never appear",
+      "Copy/paste of source and debugger output not practical; clipboard shortcuts and editable GDB command input now added"
     ],
-    "watch_root_cause": "UNCONFIRMED; capture real MI result and any visible error"
+    "watch_root_cause": "Confirmed GDB requires --thread when --frame is specified; patched, awaiting live validation"
   }
 }
