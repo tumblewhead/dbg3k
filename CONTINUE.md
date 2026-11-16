@@ -3,7 +3,7 @@
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `fix/energy-history-updates` (based on PR #6's branch)
 **Review:** https://github.com/tumblewhead/dbg3k/pull/7 (draft, stacked on PR #6)
-**Current stage:** Incremental JSONL profiling, sticky build-matched energy assumptions and transient-IO recovery; 61 local checks pass including real GDB/QEMU, review CI pending.
+**Current stage:** Incremental JSONL profiling, sticky build-matched energy assumptions and transient-IO recovery; 61 local checks and source CI pass, user retest pending.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
@@ -49,7 +49,8 @@ new behavior; a headless test exited before its UI settled and was corrected to
 await the pilot. All 61 checks pass including actual GDB/QEMU; compileall and
 whitespace checks pass. Results are recorded in handoff/energy-history-validation.json.
 
-Next: check the new review CI; pull the fix branch and restart using the existing
+PR #7 checkpoint `bab868c` passed both Python and real QEMU/GDB CI jobs in run
+43917749694. Next: pull the fix branch and restart using the existing
 live launch command. Recorded assumptions restore automatically when build-bound
 evidence exists. Optional --profile-history follows saved sessions with explicit
 provenance. User terminal/latest Kodama and long-duration catch-up remain pending.
