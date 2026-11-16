@@ -2,7 +2,7 @@
 
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/selectable-debugger-views` (based on `feature/m0-1-mi-textual-scope-001`)
-**Review:** https://github.com/tumblewhead/dbg3k/pull/1 (draft)
+**Review:** https://github.com/tumblewhead/dbg3k/pull/2 (draft, based on the M0.1 branch; original work in PR #1)
 **Current stage:** M0.1 selectable views, immediate scope/global separation and return summaries; 38 local tests pass, live Arch/QEMU check pending.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
