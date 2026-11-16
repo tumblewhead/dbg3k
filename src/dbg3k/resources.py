@@ -95,6 +95,7 @@ class InstructionProfile:
         self.total = 0
         self.unknown = 0
         self.by_function = Counter()
+        self.entry_hits = Counter()  # Dispatches at body entry; a qualified call-count proxy.
         self.complete = False
 
     def update(self, data: dict, catalog: CodeCatalog) -> bool:
@@ -110,6 +111,7 @@ class InstructionProfile:
         if run == self.run and seq <= self.seq:
             return False
         by_function = Counter()
+        entry_hits = Counter()
         accounted = overflow
         unknown = overflow
         seen = set()
@@ -124,11 +126,15 @@ class InstructionProfile:
                 unknown += count
             else:
                 by_function[function.key] += count
+                normalized = pc & ~1 if catalog.machine == 'EM_ARM' else pc
+                if normalized == function.start:
+                    entry_hits[function.key] += count
         if accounted != total or (run == self.run and total < self.total):
             raise ValueError('Inconsistent instruction snapshot totals')
         changed = (run, total, data.get('complete')) != (self.run, self.total, self.complete)
         self.run, self.seq, self.total, self.unknown = run, seq, total, unknown
         self.by_function, self.complete = by_function, data.get('complete') is True
+        self.entry_hits = entry_hits
         return changed
 
 
@@ -146,6 +152,12 @@ def decode_stack(message: str) -> dict | None:
             if (type(f['level']) is not int or type(f['pc']) is not int or
                     not isinstance(f['function'], str) or f['kind'] not in ('normal', 'inline', 'other') or
                     (f['sp'] is not None and type(f['sp']) is not int)):
+                return None
+        memory = data.get('memory')
+        if memory is not None:
+            if type(memory.get('start')) is not int or memory['start'] < 0:
+                return None
+            if not isinstance(memory.get('hex'), str) or len(bytes.fromhex(memory['hex'])) > 256:
                 return None
         return data
     except (ValueError, TypeError, KeyError, AttributeError):

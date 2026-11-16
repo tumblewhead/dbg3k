@@ -39,6 +39,14 @@ estimates, inclusive instruction counts are unavailable, and energy requires
 explicit user assumptions. Average power remains unavailable without target
 duration. See [RESOURCES.md](RESOURCES.md) for the evidence and launch contract.
 
+Additional graphical projections retain the textual panes: a vertical sampled
+stack map with bounded real memory bytes; a sortable whole-QEMU-run Pareto/table
+ranking; and a matching estimated energy ranking. Function-entry PC dispatches
+are labeled as a call-count proxy, never exact invocation identities. Current
+and selected frames use emitted-body identities; aliases are folded. Percentages
+include unknown dispatches in the denominator and energy remains explicitly
+estimated under a common per-instruction model.
+
 Per invocation: physical frame contribution, cumulative depth from an identified stack origin, inclusive maximum including callees, and observed maximum stack pointer displacement. Separate call-stack depth (frames) from bytes. Track MSP vs PSP independently, consider interrupts/hardware exception frames, dynamic allocation, recursion, tail calls, inlining, and compiler optimizations. GDB SP differences are estimates; exact maxima require SP tracing, instrumentation, or carefully qualified stack coloring. Mark evidence quality.
 
 ## Instruction attribution and static footprint

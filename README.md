@@ -69,6 +69,11 @@ Press **Ctrl+P**, search **Views**, and press Enter. Click checkboxes or use
 Up/Down and Space to show or hide Source, Stack tree and observed returns,
 Immediate scope watch, Globals, GDB console, Stack frames and stack watch,
 Code and instruction counts, and Energy estimate. Esc or Done closes the dialog.
+Additional views provide a **Graphical stack map and contents**, **Run statistics
+and Pareto ranking**, and **Graphical energy ranking**. These add graphical
+projections while retaining the original resource panes. Ranking selectors and
+clickable headings sort instructions, Calls† (entry hits), code size, density,
+and instructions per entry; energy views also sort estimated charge/energy.
 Individual **View:** commands in the palette also show a checkmark when enabled.
 Highlight a View command and press **Left or Right** to toggle it while keeping
 the palette, search text and selection open. Left/Right also toggle checkboxes
