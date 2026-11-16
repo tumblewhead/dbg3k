@@ -186,7 +186,7 @@ class KodamaCanvas(Static, can_focus=True):
         line('  Priority suffix: ! MUST (including promotion) · M MAY · L IF_I_MUST · hover/click a lane for waits', 'dim')
         if self.history.hidden_lanes:
             line(f'  {self.history.hidden_lanes} older generation lanes omitted (128-lane display limit); raw journal retains evidence.', colors['waiting'])
-        line('SIGNALS  ● publication entry  △ API request  ↑/↓ level request  ━/· observed level high/low', 'bold')
+        line('SIGNALS  ● publication entry  △ API request  △↑/△↓ level request  ━/· observed level high/low', 'bold')
         line('  ' + self.history.labels.get('status', 'Signal labels unavailable'), 'dim')
         if self.history.labels.get('skipped') or self.history.labels.get('truncated'):
             line('  Signal header has unsupported/truncated definitions; inspect setup/header and raw configuration.', colors['waiting'])
@@ -220,12 +220,12 @@ class KodamaCanvas(Static, can_focus=True):
                         marker, color = '●', colors['running']
                     elif function == 'kodama_level_set':
                         high = integer(event.get('arguments', {}).get('high'))
-                        marker, color = ('↑' if high == 1 else '↓' if high == 0 else '?'), colors['waiting']
+                        marker, color = ('△↑' if high == 1 else '△↓' if high == 0 else '△?'), colors['waiting']
                     else:
                         marker, color = '△', colors['waiting']
                 if s.index == current.index:
                     color += ' reverse'
-                out.append(marker + ' ', style=color)
+                out.append(marker.ljust(2), style=color)
             out.append('\n')
             if self.selected_signal and self.selected_signal['name'] == signal['name']:
                 level = current.core.get('levels')

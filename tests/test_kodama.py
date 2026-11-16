@@ -174,6 +174,52 @@ class KodamaWidgetTests(unittest.IsolatedAsyncioTestCase):
         app.kodama_history = history()
         return app
 
+    async def test_level_requests_keep_api_marker_and_observed_waveform_separate(self):
+        app = self.app()
+        h = app.kodama_history
+        h.reset('fixture')
+        # Entry probes see pre-operation values. Requests may repeat or fail;
+        # only subsequent observations establish the persistent level.
+        cases = [
+            (8, None, '· '),
+            (8, dict(function='signal_locked', semantics='publication-entry',
+                     arguments={'occurrence': node(1)}), '● '),
+            (8, dict(function='kodama_level_set', semantics='api-request',
+                     arguments={'level': node(1), 'high': node(1)}), '△↑'),
+            (9, None, '━ '),
+            (9, dict(function='kodama_level_set', semantics='api-request',
+                     arguments={'level': node(1), 'high': node(1)}), '△↑'),
+            (9, dict(function='kodama_level_set', semantics='api-request',
+                     arguments={'level': node(1), 'high': node(0)}), '△↓'),
+            (8, None, '· '),
+            (8, dict(function='kodama_level_set', semantics='api-request',
+                     arguments={'level': node(1), 'high': {'status': 'unavailable'}}), '△?'),
+            (None, None, '? '),
+        ]
+        for sequence, (levels, event, _) in enumerate(cases, 1):
+            data = sample(sequence)
+            data['state']['core']['levels'] = node(levels) if levels is not None else {'status': 'unavailable'}
+            data['event'] = event
+            data['origin'] = 'api' if event else 'stop'
+            self.assertTrue(h.accept(data))
+        async with app.run_test(size=(140, 55)) as pilot:
+            app.set_visible_views({'kodama'})
+            app._show_kodama()
+            await pilot.pause()
+            canvas = app.query_one(KodamaCanvas)
+            row = next(y for y, signal in canvas.signal_hits.items() if signal['name'] == 'A')
+            lane = str(canvas.render()).splitlines()[row][canvas.lane_gutter:]
+            self.assertEqual(lane, ''.join(cell for _, _, cell in cases))
+            # Two symbols still occupy one sample cell, preserving mouse alignment.
+            await pilot.click(canvas, offset=(canvas.lane_gutter + 2 * 2 + 1, row))
+            self.assertEqual(canvas.cursor, 3)
+            self.assertEqual(canvas.selected_signal['name'], 'A')
+            self.assertIn('level LOW observed', str(canvas.render()))
+            self.assertIn('1 retained publication entries', str(canvas.render()))
+            await pilot.press('right')
+            self.assertEqual(canvas.cursor, 4)
+            self.assertIn('level HIGH observed', str(canvas.render()))
+
     async def test_wide_lanes_selection_scrub_expand_and_theme(self):
         app = self.app()
         async with app.run_test(size=(140, 55)) as pilot:
