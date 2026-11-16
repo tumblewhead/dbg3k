@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 from pathlib import Path
+from collections import deque
 import queue
 from rich.table import Table
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.widgets import Footer, Header, RichLog, Static, Tree
+from textual.widgets import Footer, Header, Input, RichLog, Static, Tree
+
+from .commands import select_thread_id, locals_request
 
 from .backend import GdbTransport
 from .mi import Record
@@ -29,7 +32,9 @@ class DebuggerApp(App):
     #stepbar { height: 3; background: #172b38; color: #7de5cb; padding: 0 1; }
     #scope { height: 45%; border: round #2d596e; background: #192733; }
     #watches { height: 1fr; border: round #2d596e; background: #192733; padding: 1; }
-    #console { height: 8; border: round #2d596e; background: #192733; }
+    #console_panel { height: 10; border: round #2d596e; background: #192733; }
+    #console { height: 1fr; background: #192733; }
+    #gdb_input { height: 3; background: #223746; }
     """
     BINDINGS = [
         Binding('n', 'next', 'Next'),
@@ -49,6 +54,12 @@ class DebuggerApp(App):
         Binding('end', 'source_end', 'Bottom', show=False),
         Binding('b', 'breakpoint', 'Breakpoint'),
         Binding('r', 'run_to_cursor', 'Run to cursor'),
+        Binding('y', 'copy_line', 'Copy line', show=False),
+        Binding('Y', 'copy_source', 'Copy file', show=False),
+        Binding('W', 'copy_watches', 'Copy watches', show=False),
+        Binding('L', 'copy_log', 'Copy log', show=False),
+        Binding('colon', 'focus_console', 'GDB command'),
+        Binding('escape', 'focus_source', 'Leave command', show=False),
         Binding('q', 'quit', 'Quit'),
     ]
 
@@ -68,6 +79,9 @@ class DebuggerApp(App):
         self._source_lines = 0
         self._watches_error = ''
         self._watch_results: dict[int, int] = {}
+        self._active_thread: str | None = None
+        self._connected = False
+        self._log_lines: deque[str] = deque(maxlen=500)
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
@@ -79,7 +93,9 @@ class DebuggerApp(App):
             with Vertical(id='right'):
                 yield Tree('cpu0 / observed call stack', id='scope')
                 yield Static('Watches appear when GDB stops.', id='watches')
-        yield RichLog(id='console', highlight=True, markup=False)
+        with Vertical(id='console_panel'):
+            yield RichLog(id='console', highlight=True, markup=False)
+            yield Input(id='gdb_input', placeholder=': GDB console command (paste and press Enter)')
         yield Footer()
 
     def on_mount(self) -> None:
@@ -99,6 +115,7 @@ class DebuggerApp(App):
         return s.replace('\\', '\\\\').replace('"', '\\"')
 
     def _log(self, line: str) -> None:
+        self._log_lines.append(line.rstrip())
         self.query_one('#console', RichLog).write(line.rstrip())
 
     def _send(self, command: str, purpose: str, level: int | None = None) -> None:
@@ -132,8 +149,15 @@ class DebuggerApp(App):
             self._show_status()
             return
         if record.kind == '*' and record.cls == 'stopped':
+            thread = record.payload.get('thread-id') if isinstance(record.payload, dict) else None
+            if thread is not None and str(thread).isdecimal():
+                self._active_thread = str(thread)
             self.status = 'HALTED'
-            self._refresh()
+            if self._connected:
+                if self._active_thread is None:
+                    self._send('-thread-info', 'thread_info')
+                else:
+                    self._refresh()
             return
         if record.kind != '^':
             return
@@ -152,9 +176,15 @@ class DebuggerApp(App):
         if purpose == 'load':
             self._send(f'-target-select remote {self.remote}', 'connect')
         elif purpose == 'connect':
+            self._connected = True
             self.status = 'HALTED'
-            self._refresh()
             self._log(f'Connected to {self.remote}; ELF: {self.elf}')
+            self._send('-thread-info', 'thread_info')
+        elif purpose == 'thread_info':
+            self._active_thread = select_thread_id(record.payload) or self._active_thread
+            if self._active_thread is None:
+                self._log('GDB did not report a current thread; frame-local watches unavailable.')
+            self._refresh()
         elif purpose == 'frames':
             raw = record.payload.get('stack', [])
             frames = [Frame.from_mi(item['frame']) for item in raw if isinstance(item, dict) and 'frame' in item]
@@ -164,9 +194,13 @@ class DebuggerApp(App):
             self._watches_error = ''
             self._watch_results = {}
             self._show_watches()
-            for frame in frames[:12]:
-                self._send(f'-stack-list-variables --frame {frame.level} --all-values',
-                           'vars', frame.level)
+            if self._active_thread is None:
+                self._watches_error = 'No active GDB thread ID; cannot read per-frame locals'
+                self._show_watches()
+            else:
+                for frame in frames[:12]:
+                    self._send(locals_request(self._active_thread, frame.level),
+                               'vars', frame.level)
         elif purpose == 'vars' and level is not None:
             variables = record.payload.get('variables', [])
             if not isinstance(variables, list):
@@ -191,13 +225,15 @@ class DebuggerApp(App):
     def _refresh(self) -> None:
         self.model.begin_stop()
         self.selected_level = 0
-        self._send('-stack-list-frames', 'frames')
+        frame_command = (f'-stack-list-frames --thread {self._active_thread}'
+                         if self._active_thread else '-stack-list-frames')
+        self._send(frame_command, 'frames')
         self._show_status()
 
     def _show_status(self) -> None:
         self.query_one('#stepbar', Static).update(
             f'[{self.status}]  s:into  n:next  i:instr  I:over-instr  Space:repeat  '
-            f'j/k:cursor  b:break  r:until  o:out  c:run  q:quit  · Stop #{self.model.stop}'
+            f'j/k:cursor  b:break  r:until  c:run  y:copy  W:watches  L:log  ::GDB  · Stop #{self.model.stop}'
         )
 
     def _show_source(self, *, reveal: bool = False, follow_pc: bool = False) -> None:
@@ -356,3 +392,55 @@ class DebuggerApp(App):
             self.selected_level = event.node.data
             self.nav_file = ''  # selecting source never executes firmware
             self._show_source(reveal=True, follow_pc=True)
+
+    def _copy(self, content: str, description: str) -> None:
+        if not content:
+            self.notify(f'Nothing to copy: {description}', severity='warning')
+            return
+        self.copy_to_clipboard(content)
+        self.notify(f'Copied {description} to clipboard')
+
+    def action_copy_line(self) -> None:
+        """Copy source line, or selected scope if the tree has focus."""
+        tree = self.query_one('#scope', Tree)
+        if self.focused is tree and tree.cursor_node is not None:
+            self._copy(str(tree.cursor_node.label), 'scope node')
+            return
+        path = Path(self.nav_file)
+        if not path.is_file():
+            self.notify('No source file available', severity='warning')
+            return
+        lines = path.read_text(encoding='utf-8', errors='replace').splitlines()
+        if 1 <= self.nav_line <= len(lines):
+            self._copy(lines[self.nav_line - 1], 'source line')
+
+    def action_copy_source(self) -> None:
+        path = Path(self.nav_file)
+        if path.is_file():
+            self._copy(path.read_text(encoding='utf-8', errors='replace'), 'source file')
+        else:
+            self.notify('No source file available', severity='warning')
+
+    def action_copy_watches(self) -> None:
+        watches = sorted(self.model.active_watches(), key=lambda w: (w.frame_level, w.label))
+        self._copy('\n'.join(f'{w.label}\t{w.value}\t{w.trend}' for w in watches),
+                   'watch values')
+
+    def action_copy_log(self) -> None:
+        self._copy('\n'.join(self._log_lines), 'debugger log')
+
+    def action_focus_console(self) -> None:
+        self.query_one('#gdb_input', Input).focus()
+
+    def action_focus_source(self) -> None:
+        self.set_focus(None)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id != 'gdb_input':
+            return
+        command = event.value.strip()
+        if command:
+            self._log(f'(gdb) {command}')
+            self._send(f'-interpreter-exec console "{self._quoted(command)}"', 'console')
+            event.input.value = ''
+        self.set_focus(None)
