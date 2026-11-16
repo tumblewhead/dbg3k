@@ -100,3 +100,26 @@ class ObservationFlowTests(unittest.IsolatedAsyncioTestCase):
                 observations = [r for r in records if r['kind'] == 'observation']
                 self.assertEqual([r['stop'] for r in observations], [1, 2])
                 self.assertTrue(all(r['status'] == 'unavailable' and 'value' not in r for r in observations))
+
+    async def test_capture_before_queued_execution_keeps_original_stop(self):
+        app = self.app()
+        with TemporaryDirectory() as folder:
+            async with app.run_test(size=(100, 40)) as pilot:
+                await pilot.pause()
+                app._trace = TraceWriter('demo.elf', 'localhost:1234', folder)
+                app.status, app._active_thread = 'HALTED', '1'
+                app.model.begin_stop()
+                app._observation_ready = True
+                app.set_observations(['state'])
+                request = app._observation_request
+                token = app._observation_pending[request]['token']
+                # A user queues a step before the UI drains GDB's already
+                # completed capture. GDB emits the read before *running.
+                app.status = 'COMMANDING'
+                app._accept_observation(dict(request=request, stop=1, thread='1',
+                    expression='state', status='ok', value=dict(kind='integer', value='42')))
+                app._handle(Record(token, '^', 'done', {}))
+                records = [json.loads(line) for line in app._trace.path.read_text().splitlines()]
+                observations = [r for r in records if r['kind'] == 'observation']
+                self.assertEqual(len(observations), 1)
+                self.assertEqual((observations[0]['stop'], observations[0]['status']), (1, 'ok'))

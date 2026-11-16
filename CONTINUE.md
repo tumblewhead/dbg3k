@@ -3,7 +3,7 @@
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/structured-observations` (based on PR #7's branch)
 **Review:** https://github.com/tumblewhead/dbg3k/pull/8 (draft, stacked on PR #7)
-**Current stage:** Selected typed observations extend dbg3k.trace.v1; real pinned Kodama ARM/QEMU qualification passes; 67 local checks pass; Python CI passed; corrected optional cross-repository CI checkout awaits rerun.
+**Current stage:** Selected typed observations extend dbg3k.trace.v1; real pinned Kodama ARM/QEMU qualification passes; 68 local checks pass; both CI jobs passed checkpoint fe1c5c4; final fast-step ordering checkpoint awaits CI.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
@@ -41,6 +41,14 @@ missing-collector test passes too. Final full rerun passes all67 checks; compile
 Retained issues during work: sandbox denied localhost socket creation (approved
 rerun passed); first regression run exposed a synthetic catalog without build_id
 (getattr fallback fixed); one documentation patch context mismatch was corrected.
+
+Final local suite passes all68 checks, including capture replies drained after a
+step is queued but before GDB reports running. Those remain valid at the issuing
+stop; truly stale replies still fail explicitly. Both CI jobs passed checkpoint
+fe1c5c4 in run43944773286 (Ubuntu QEMU8.2/GDB15; real Kodama CI explicitly skipped
+without cross-repository token, independently qualified locally). Final ordering
+checkpoint CI pending. User histories and dirty Kodama work remain untouched.
+
 Schema/query/example/demo: docs/OBSERVATIONS.md. No physical hardware, continuous
 event reconstruction, arbitrary C++ expression decoder or Kodama-specific pane
 is claimed. Machine receipt: handoff/observations-validation.json.

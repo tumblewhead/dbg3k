@@ -580,8 +580,10 @@ class DebuggerApp(App):
         expression = data.get('expression')
         if expression not in request['remaining']:
             return
+        # A queued step sets COMMANDING before GDB drains this read. Its
+        # response still precedes *running and belongs to the issuing stop.
         if (data.get('stop') != request['stop'] or data.get('thread') != request['thread'] or
-                self.model.stop != request['stop'] or self.status != 'HALTED'):
+                self.model.stop != request['stop'] or self.status not in ('HALTED', 'COMMANDING')):
             self._log(f'Observation discarded: stale stop/context for {expression}')
             return
         request['remaining'].remove(expression)
