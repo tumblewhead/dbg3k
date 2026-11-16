@@ -33,7 +33,7 @@ class VisualSmokeTest(unittest.IsolatedAsyncioTestCase):
             app._show_watches()
             await pilot.pause()
             tree = app.query_one("#scope", Tree)
-            parent = tree.root.children[0]
+            parent = app._stack_branch.children[0]
             self.assertIn("main(2)", str(parent.label))
             self.assertTrue(any("foo(2)" in str(child.label)
                                 for child in parent.children))
@@ -158,6 +158,66 @@ class VisualSmokeTest(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(app._trace.path.exists())
                 app._trace.close()
                 app._trace = None
+
+
+    async def test_return_line_survives_caller_exit_and_repeated_async_redraw(self):
+        """User regression: bar's return under foo flashes then disappears."""
+        app = DebuggerApp("demo.elf", "gdb", "localhost:1234")
+        app.transport.start = lambda: None
+        app.transport.close = lambda: None
+        app._send = lambda *args, **kwargs: None
+        async with app.run_test() as pilot:
+            app.status = "HALTED"
+            app._active_thread = "1"
+            app.model.begin_stop()
+            app.model.set_frames([Frame(0, "foo", "main.c", 9),
+                                  Frame(1, "main", "main.c", 20)])
+            series = app._returns.observe(
+                ReturnObservation("foo", "bar(2)", "6", app.model.stop),
+                thread="1", callee_function="bar")
+            app._show_scope()
+            await pilot.pause()
+            key = series.key
+            original_node = app._return_edge_nodes[key]
+            original_branch = app._return_branch
+            self.assertIn("bar(2)", str(original_node.label))
+            self.assertEqual(len(app._return_edge_nodes), 1)
+
+            # Following instructions exit foo and leave only main on the stack.
+            # Subsequent async GDB frame/locals/arguments/global results redraw
+            # the active branch but MUST NEVER remove return evidence.
+            app.model.begin_stop()
+            app.model.set_frames([Frame(0, "main", "main.c", 21)])
+            for _ in range(5):
+                app._show_scope()
+                await pilot.pause()
+                self.assertIs(app._return_branch, original_branch)
+                self.assertIs(app._return_edge_nodes[key], original_node)
+                self.assertIn("bar(2)", str(original_node.label))
+                self.assertEqual(len(app._return_edge_nodes), 1)
+            self.assertEqual(len(app._stack_branch.children), 1)
+            self.assertIn("main(", str(app._stack_branch.children[0].label))
+
+            # Next loop, the SAME node updates rather than being replaced.
+            updated = app._returns.observe(
+                ReturnObservation("foo", "bar(3)", "9", app.model.stop),
+                thread="1", callee_function="bar")
+            app._show_scope()
+            await pilot.pause()
+            self.assertIs(app._return_edge_nodes[key], original_node)
+            self.assertEqual(updated.count, 2)
+            self.assertIn("bar(3)", str(original_node.label))
+            self.assertIn("9", str(original_node.label))
+            self.assertIn("stop 1", app._return_tooltip(key))
+            self.assertIn("stop 2", app._return_tooltip(key))
+
+            copied = []
+            app._copy = lambda contents, label: copied.append((contents, label))
+            app.on_tree_node_selected(Tree.NodeSelected(original_node))
+            self.assertEqual(len(copied), 1)
+            self.assertIn("bar(2)", copied[0][0])
+            self.assertIn("bar(3)", copied[0][0])
+
 
 
 if __name__ == "__main__":
