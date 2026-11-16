@@ -135,6 +135,8 @@ class RunRanking(Vertical):
             yield Select([(self.METRICS[key], key) for key in keys], value=self.sort_metric,
                          allow_blank=False, classes='rank-sort')
             yield Button('↓ Desc', classes='rank-order')
+            if self.energy:
+                yield Button('Model…', classes='rank-model')
         yield Static('Waiting for QEMU run data…', classes='rank-summary', markup=False)
         yield Static('', classes='rank-chart')
         yield DataTable(classes='rank-table', cursor_type='row', fixed_columns=1)
@@ -152,8 +154,8 @@ class RunRanking(Vertical):
         table.add_column('Cumul %', key='cumulative')
         table.tooltip = 'Click a column heading to sort; click again to reverse. Calls† = entry dispatches, a call-count proxy.'
 
-    def set_data(self, catalog, profile, model, current, selected, status, halted):
-        self.data = (catalog, profile, model, current, selected, status, halted)
+    def set_data(self, catalog, profile, model, current, selected, status, halted, source_note=''):
+        self.data = (catalog, profile, model, current, selected, status, halted, source_note)
         if self.is_mounted:
             self.redraw()
 
@@ -171,6 +173,10 @@ class RunRanking(Vertical):
             self.redraw()
 
     def on_button_pressed(self, event: Button.Pressed):
+        if event.button.has_class('rank-model'):
+            event.stop()
+            self.app.action_energy_model()
+            return
         if event.button.has_class('rank-order'):
             event.stop()
             self.descending = not self.descending
@@ -189,7 +195,7 @@ class RunRanking(Vertical):
         else:
             self.sort_metric, self.descending = key, key != 'name'
         self.query_one(Select).value = self.sort_metric
-        self.query_one(Button).label = '↓ Desc' if self.descending else '↑ Asc'
+        self.query_one('.rank-order', Button).label = '↓ Desc' if self.descending else '↑ Asc'
         self.redraw()
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted):
@@ -201,7 +207,7 @@ class RunRanking(Vertical):
     def redraw(self):
         if not self.data or not self.is_mounted:
             return
-        catalog, profile, model, current, selected, status, halted = self.data
+        catalog, profile, model, current, selected, status, halted, source_note = self.data
         table = self.query_one(DataTable)
         old_key = self._row_keys[table.cursor_row] if 0 <= table.cursor_row < len(self._row_keys) else None
         old_scroll = (table.scroll_x, table.scroll_y)
@@ -212,30 +218,33 @@ class RunRanking(Vertical):
         chart_widget = self.query_one('.rank-chart', Static)
         note = self.query_one('.rank-note', Static)
         if catalog is None or profile.run is None or status:
-            summary.update(status or 'ELF / instruction profile unavailable.')
+            summary.update((status or 'ELF / instruction profile unavailable.')
+                           + ('\n' + source_note if source_note else ''))
             chart_widget.update('No run ranking available.')
             note.update('The existing resource panes remain independently selectable.')
-            return
-        if self.energy and model is None:
-            summary.update('Energy ranking unavailable: configure palette → Energy model.')
-            chart_widget.update('No chip assumptions are supplied automatically.')
-            note.update('Average power requires target execution duration.')
             return
         rows = rank_functions(function_stats(catalog, profile, model), self.sort_metric, self.descending)
         self.rows = rows
         active = sum(row.instructions > 0 for row in rows)
-        total_entries = sum(row.entries for row in rows)
+        total_entries = sum(row.entries for row in rows) if profile.entries_available else 'unavailable'
         lines = [f'Run {profile.run[:8]} · since QEMU launch · {"final" if profile.complete else "periodic snapshot"}',
                  f'{profile.total} dispatches · {active}/{len(rows)} executed bodies · {total_entries} entry hits',
                  f'Sized body coverage: {code_coverage(catalog)} B · unknown: {profile.unknown} dispatches']
-        if self.energy:
+        if source_note:
+            lines.append(source_note)
+        if self.energy and model is not None:
             lines += [f'Estimated run: {model.energy_pj(profile.total):.6g} pJ · '
                       f'unattributed: {model.energy_pj(profile.unknown):.6g} pJ',
                       f'Assumptions: {model.ua_per_mhz:g} µA/MHz ÷ {model.mips_per_mhz:g} MIPS/MHz × {model.voltage:g} V']
+        elif self.energy:
+            lines.append('Energy unavailable: use Model… to configure assumptions. Recorded work remains visible.')
         for rank, row in enumerate(rows, 1):
             if row.function.key == current:
+                rank_label = (f'rank {rank}/{len(rows)} by {self.METRICS[self.sort_metric]}'
+                              if row.metric(self.sort_metric) is not None
+                              else f'{self.METRICS[self.sort_metric]} rank unavailable')
                 lines.append(f'{"Current" if halted else "Last stopped"}: {row.function.names[0]} · '
-                             f'{row.instructions} dispatches · rank {rank}/{len(rows)} by {self.METRICS[self.sort_metric]}')
+                             f'{row.instructions} dispatches · {rank_label}')
                 break
         else:
             lines.append('Current function: unavailable (no current mapped GDB frame).')
@@ -258,7 +267,7 @@ class RunRanking(Vertical):
             cumulative_share = 100 * cumulative / profile.total if profile.total else None
             marker = '▶' if key == current else '▸' if key == selected else ' '
             name = Text(f'{marker} {index + 1}. {row.function.names[0]}', style='bold' if key == current else '')
-            cells = [name, str(row.instructions), str(row.entries), str(row.function.size),
+            cells = [name, str(row.instructions), compact(row.entries), str(row.function.size),
                      compact(row.per_entry), compact(row.density)]
             if self.energy:
                 cells += [compact(row.energy_pj), compact(row.charge_pc)]

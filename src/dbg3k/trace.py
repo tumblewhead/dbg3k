@@ -26,7 +26,8 @@ def trace_filename(elf: str | Path, timestamp: datetime) -> str:
 
 class TraceWriter:
     def __init__(self, elf: str | Path, remote: str, directory: str | Path,
-                 *, now: datetime | None = None, session: str | None = None) -> None:
+                 *, now: datetime | None = None, session: str | None = None,
+                 elf_sha256: str | None = None) -> None:
         stamp = now or datetime.now().astimezone()
         self.target = Path(elf).stem
         self.session = session or uuid4().hex
@@ -38,15 +39,18 @@ class TraceWriter:
         self._file.seek(0, 2)
         end = self._file.tell()
         if end:
-            self._file.seek(end - 1)
-            if self._file.read(1) != "\n":
+            with self.path.open('rb') as tail:
+                tail.seek(-1, 2)
+                last_byte = tail.read(1)
+            if last_byte != b"\n":
                 self._file.seek(0, 2)
                 self._file.write("\n")
                 self._file.flush()
         self.sequence = 0
         self.closed = False
+        self.start_offset = self._file.tell()
         self.record("session_start", elf=str(Path(elf).expanduser().resolve()),
-                    remote=remote, target=self.target)
+                    remote=remote, target=self.target, elf_sha256=elf_sha256)
 
     def record(self, kind: str, **fields: Any) -> None:
         if self.closed:
@@ -68,12 +72,14 @@ class TraceWriter:
         rows = ["timestamp\tstop\tthread\tcaller\tcallee\targs\tvalue\torigin"]
         # Flush first to ensure a click sees the most recently recorded return.
         self._file.flush()
-        with self.path.open("r", encoding="utf-8") as stream:
+        with self.path.open("rb") as stream:
             for line in stream:
                 try:
                     record = json.loads(line)
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, UnicodeError):
                     continue  # tolerate a truncated final line after abrupt shutdown
+                if not isinstance(record, dict):
+                    continue
                 if (record.get("session") != self.session or
                     record.get("kind") != "return" or
                     record.get("thread") != thread or
@@ -92,6 +98,8 @@ class TraceWriter:
 
     def close(self) -> None:
         if not self.closed:
-            self.record("session_end", target=self.target)
-            self.closed = True
-            self._file.close()
+            try:
+                self.record("session_end", target=self.target)
+            finally:
+                self.closed = True
+                self._file.close()

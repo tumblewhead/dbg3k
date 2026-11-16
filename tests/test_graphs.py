@@ -143,8 +143,15 @@ class GraphWidgetTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn('unattributed: 825 pJ', str(graph.query_one('.rank-summary', Static).render()))
             app.energy_model = None
             app._show_resources()
-            self.assertEqual(graph.query_one(DataTable).row_count, 0)
+            self.assertEqual(graph.query_one(DataTable).row_count, 3)
+            self.assertTrue(all(row.energy_pj is None for row in graph.rows))
             self.assertIn('unavailable', str(graph.query_one('.rank-summary', Static).render()))
+            await pilot.click('#energy_graph_content .rank-model')
+            await pilot.pause()
+            from dbg3k.views import EnergyScreen
+            self.assertIsInstance(app.screen, EnergyScreen)
+            await pilot.press('escape')
+            await pilot.pause()
             app.energy_model = EnergyModel(100, 2, 3.3)
             app._count_status = 'ELF hash mismatch'
             app._show_resources()

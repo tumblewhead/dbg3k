@@ -48,6 +48,12 @@ GDB stack snapshots/estimates, ELF function body sizes, QEMU plugin instruction
 dispatch counts, and user-configured energy estimates. See
 [setup, launch commands and measurement limits](docs/RESOURCES.md).
 
+Energy rankings now follow recorded JSONL profile/model events as they grow,
+restore prior explicit assumptions for the same ELF, and retain validated data
+through transient read failures. The energy pane's **Model…** button edits
+assumptions directly. Use `--profile-history FILE [--profile-session UUID]` to
+follow a recorded profile instead of the live plugin file; see the resource guide.
+
 - `src/dbg3k/mi.py`: GDB/MI record parser, no CLI scraping
 - `src/dbg3k/backend.py`: subprocess, tokenized MI transport and event queue
 - `src/dbg3k/model.py`: frame-aware locals and globals, bounded histories, numeric sparklines

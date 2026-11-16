@@ -96,6 +96,7 @@ class InstructionProfile:
         self.unknown = 0
         self.by_function = Counter()
         self.entry_hits = Counter()  # Dispatches at body entry; a qualified call-count proxy.
+        self.entries_available = True
         self.complete = False
 
     def update(self, data: dict, catalog: CodeCatalog) -> bool:
@@ -135,6 +136,37 @@ class InstructionProfile:
         self.run, self.seq, self.total, self.unknown = run, seq, total, unknown
         self.by_function, self.complete = by_function, data.get('complete') is True
         self.entry_hits = entry_hits
+        self.entries_available = True
+        return changed
+
+    def update_record(self, record: dict, catalog: CodeCatalog) -> bool:
+        """Restore one cumulative journal snapshot; never sum cumulative totals."""
+        if record.get('elf_sha256') != catalog.sha256:
+            raise ValueError('JSONL profile ELF hash mismatch')
+        run, seq, total, unknown = (record.get(k) for k in ('run', 'profile_seq', 'total', 'unknown'))
+        if (not isinstance(run, str) or not run or
+                not all(type(x) is int and x >= 0 for x in (seq, total, unknown)) or
+                type(record.get('complete')) is not bool):
+            raise ValueError('Invalid JSONL profile metadata')
+        functions, entries = record.get('functions'), record.get('entry_hits', {})
+        keys = {f.key for f in catalog.functions}
+        for mapping in (functions, entries):
+            if not isinstance(mapping, dict) or any(
+                    key not in keys or type(value) is not int or value < 0 for key, value in mapping.items()):
+                raise ValueError('Invalid JSONL function counters')
+        if sum(functions.values()) + unknown != total:
+            raise ValueError('Inconsistent JSONL profile total')
+        if any(value > functions.get(key, 0) for key, value in entries.items()):
+            raise ValueError('JSONL entry hits exceed instruction counts')
+        if run == self.run and seq <= self.seq:
+            return False
+        if run == self.run and total < self.total:
+            raise ValueError('JSONL profile regressed within a QEMU run')
+        changed = (run, total, record['complete']) != (self.run, self.total, self.complete)
+        self.run, self.seq, self.total, self.unknown = run, seq, total, unknown
+        self.by_function, self.entry_hits = Counter(functions), Counter(entries)
+        self.entries_available = 'entry_hits' in record
+        self.complete = record['complete']
         return changed
 
 

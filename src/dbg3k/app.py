@@ -8,6 +8,7 @@ from collections.abc import Iterable
 import queue
 import json
 import time
+from datetime import datetime
 from elftools.common.exceptions import ELFError
 from rich.text import Text
 from textual.app import App, ComposeResult, SystemCommand
@@ -24,7 +25,8 @@ from .mi import Record
 from .model import Frame, ScopeModel, Watch, parse_stack_arguments
 from .calltree import ReturnKey, ReturnLedger, ReturnObservation, display_call, observed_return, probe_return
 from .scope_ui import ScopeTree
-from .trace import TraceWriter
+from .trace import TraceWriter, trace_filename
+from .profile_history import JsonlTail, ProfileHistory, recover_energy_model
 from .watch_ui import WatchRow
 from .views import VIEWS, ViewsScreen, ViewCommandPalette, EnergyScreen
 from .resources import CodeCatalog, StackProfile, InstructionProfile, EnergyModel, decode_stack
@@ -115,14 +117,29 @@ class DebuggerApp(App):
 
     def __init__(self, elf: str, gdb: str, remote: str,
                  history_dir: str = "dbg3k-history", instruction_profile: str | None = None,
-                 energy_model: EnergyModel | None = None) -> None:
+                 energy_model: EnergyModel | None = None, profile_history: str | None = None,
+                 profile_session: str | None = None) -> None:
         super().__init__()
         self.elf, self.remote = elf, remote
         self.history_dir = history_dir
         self.instruction_path = Path(instruction_profile).expanduser() if instruction_profile else None
         self.energy_model = energy_model
+        if instruction_profile and profile_history:
+            raise ValueError('Choose a live instruction profile or a JSONL profile history')
+        self.profile_history_path = Path(profile_history).expanduser() if profile_history else None
+        self.profile_session = profile_session
+        self._energy_override = energy_model is not None
+        self._energy_source = 'CLI assumptions' if energy_model is not None else ''
+        self._profile_reader = JsonlTail(self.profile_history_path) if self.profile_history_path else None
+        self._profile_history = None
+        self._profile_input_warning = ''
+        self._profile_history_warning = ''
+        self._history_rotated = False
+        self._profile_source = ''
+        self._last_profile_session = None
         self.stack_profile = StackProfile()
         self.instruction_counts = InstructionProfile()
+        self._profile_collector = InstructionProfile()
         self._stack_ready = False
         self._stack_error = ''
         self._resource_poll_time = 0.0
@@ -133,6 +150,11 @@ class DebuggerApp(App):
         except (OSError, ValueError, ELFError) as exc:
             self.catalog = None
             self._catalog_error = str(exc)
+        if self.profile_history_path:
+            self._count_status = 'Waiting for matching JSONL instruction profile records.'
+            if self.catalog:
+                self._profile_history = ProfileHistory(self.catalog, session=profile_session,
+                                                       profile=self.instruction_counts)
         self._trace: TraceWriter | None = None
         self._trace_error_reported = False
         self._returns = ReturnLedger()
@@ -216,7 +238,7 @@ class DebuggerApp(App):
         yield SystemCommand('Views', 'Choose visible panes with checkboxes',
                             self.action_choose_views)
         yield SystemCommand('Energy model', 'Configure µA/MHz, MIPS/MHz and voltage assumptions',
-                            lambda: self.push_screen(EnergyScreen()))
+                            self.action_energy_model)
         for key, (label, _) in VIEWS.items():
             enabled = key in self.visible_views
             yield SystemCommand(
@@ -230,6 +252,9 @@ class DebuggerApp(App):
 
     def action_choose_views(self) -> None:
         self.push_screen(ViewsScreen(self.visible_views))
+
+    def action_energy_model(self) -> None:
+        self.push_screen(EnergyScreen())
 
     def action_toggle_view(self, key: str) -> None:
         self.set_visible_views(self.visible_views ^ {key})
@@ -250,6 +275,13 @@ class DebuggerApp(App):
 
     def on_mount(self) -> None:
         self.query_one('#scope', ScopeTree).return_tooltip = self._return_tooltip
+        if self.catalog and self.energy_model is None and not self.profile_history_path:
+            prefix = trace_filename(self.elf, datetime.now()).rsplit('_', 1)[0]
+            recovered = recover_energy_model(self.history_dir, prefix, self.catalog.sha256)
+            if recovered:
+                self.energy_model, session = recovered
+                self._energy_source = f'Restored JSONL assumptions from session {session}'
+        self._poll_profile_history()
         self._show_resources()
         try:
             self.transport.start()
@@ -286,6 +318,9 @@ class DebuggerApp(App):
             except OSError:
                 pass
             self._trace = None
+            if not self.profile_history_path:
+                self._profile_reader = None
+                self._profile_history = None
 
     def _return_tooltip(self, key: ReturnKey) -> str:
         series = self._returns.series.get(key)
@@ -357,12 +392,16 @@ class DebuggerApp(App):
         if time.monotonic() - self._resource_poll_time >= .25:
             self._resource_poll_time = time.monotonic()
             self._poll_instruction_profile()
+            self._poll_profile_history()
 
-    def set_energy_model(self, model: EnergyModel) -> None:
+    def set_energy_model(self, model: EnergyModel, *, source='User-configured assumptions', override=True) -> None:
         self.energy_model = model
+        self._energy_override = override
+        self._energy_source = source
         self._trace_record('energy_model', ua_per_mhz=model.ua_per_mhz,
                            mips_per_mhz=model.mips_per_mhz, voltage=model.voltage,
-                           origin='user-configured-active-core-model')
+                           elf_sha256=self.catalog.sha256 if self.catalog else None,
+                           source=source, origin='user-configured-active-core-model')
         self._show_resources()
 
     def _show_resources(self) -> None:
@@ -378,32 +417,97 @@ class DebuggerApp(App):
         current, selected = current_bodies(self.stack_profile, self.catalog,
                                            self.model.stop, self.selected_level)
         for key in ('run', 'energy'):
+            notes = [self._profile_source, self._profile_input_warning, self._profile_history_warning]
+            if key == 'energy' and self._energy_source:
+                notes.append(self._energy_source)
             self.query_one(f'#{key}_graph_content', RunRanking).set_data(
                 self.catalog, self.instruction_counts, self.energy_model, current, selected,
-                self._count_status, self.status == 'HALTED')
+                self._count_status, self.status == 'HALTED', '\n'.join(n for n in notes if n))
+
+    def _poll_profile_history(self) -> None:
+        if self._profile_reader is None or self._profile_history is None:
+            return
+        previous = (self._profile_history_warning, self._profile_source, self._energy_source)
+        changed = False
+        try:
+            generation = self._profile_reader.generation
+            records = self._profile_reader.poll()
+            if self._profile_reader.generation != generation:
+                # An explicitly followed file was rotated/truncated. Rebuild
+                # session selection while retaining the displayed last snapshot.
+                self._profile_history = ProfileHistory(
+                    self.catalog, session=self._profile_history.requested_session,
+                    profile=self.instruction_counts)
+                self._history_rotated = True
+            self._profile_history_warning = ''
+            for record in records:
+                try:
+                    applied = self._profile_history.apply(record)
+                    changed = applied or changed
+                    if applied and not self._energy_override:
+                        model = self._profile_history.energy_model
+                        if model is not None or self.profile_history_path:
+                            self.energy_model = model
+                            self._energy_source = self._profile_history.energy_source if model else ''
+                except (ValueError, TypeError, KeyError) as exc:
+                    self._profile_history_warning = f'Ignored invalid JSONL profile record: {exc}'
+            session = self._profile_history.selected_session
+            if session and self.instruction_counts.run is not None:
+                self._history_rotated = False
+                mode = 'Recorded JSONL' if self.profile_history_path else 'Live JSONL'
+                self._profile_source = f'{mode} {self._profile_reader.path.name} · session {session[:8]}'
+                if self._profile_reader.backlog:
+                    self._profile_source += f' · catching up ({self._profile_reader.backlog} bytes queued)'
+                if self.profile_history_path:
+                    self._profile_source += ' · recorded run, independent of live debugger'
+                if self.profile_history_path:
+                    self._count_status = ''
+            if self._history_rotated:
+                self._profile_history_warning = 'JSONL replaced/truncated; retaining last snapshot until matching records arrive.'
+            if self._profile_reader.skipped:
+                self._profile_history_warning += f' Skipped {self._profile_reader.skipped} malformed JSONL line(s).'
+        except OSError as exc:
+            self._profile_history_warning = f'History read unavailable; retaining last validated snapshot: {exc}'
+        if changed or previous != (self._profile_history_warning, self._profile_source, self._energy_source):
+            self._show_resources()
 
     def _poll_instruction_profile(self) -> None:
         if self.instruction_path is None:
             return
         previous_status = self._count_status
+        previous_warning = self._profile_input_warning
         changed = False
         try:
             if self.catalog is None:
                 raise ValueError('ELF unavailable: ' + self._catalog_error)
             data = json.loads(self.instruction_path.read_text())
-            changed = self.instruction_counts.update(data, self.catalog)
+            changed = self._profile_collector.update(data, self.catalog)
             self._count_status = ''
-            if changed:
-                self._trace_record('instruction_profile', elf_sha256=self.catalog.sha256,
-                                   run=self.instruction_counts.run, profile_seq=self.instruction_counts.seq,
-                                   total=self.instruction_counts.total, unknown=self.instruction_counts.unknown,
-                                   complete=self.instruction_counts.complete,
-                                   functions=dict(self.instruction_counts.by_function),
-                                   entry_hits=dict(self.instruction_counts.entry_hits),
-                                   origin='qemu-plugin-instruction-dispatch')
-        except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+            self._profile_input_warning = ''
+            session = self._trace.session if self._trace else None
+            if changed or session != self._last_profile_session:
+                profile = self._profile_collector
+                fields = dict(elf_sha256=self.catalog.sha256, run=profile.run, profile_seq=profile.seq,
+                              total=profile.total, unknown=profile.unknown, complete=profile.complete,
+                              functions=dict(profile.by_function), entry_hits=dict(profile.entry_hits),
+                              origin='qemu-plugin-instruction-dispatch')
+                self._trace_record('instruction_profile', **fields)
+                self._last_profile_session = session
+                if self._trace is not None and self._profile_reader is not None:
+                    self._poll_profile_history()
+                if (self._trace is None or self._profile_reader is None or
+                        self.instruction_counts.run != profile.run or self.instruction_counts.seq < profile.seq):
+                    # Recording/read failures must not disable validated live data.
+                    self.instruction_counts.update_record(fields, self.catalog)
+                    self._profile_source = 'Validated live profile (JSONL synchronization pending/unavailable)'
+        except (OSError, json.JSONDecodeError) as exc:
+            if self.instruction_counts.run is not None:
+                self._profile_input_warning = f'Live profile read delayed; retaining last validated snapshot: {exc}'
+            else:
+                self._count_status = f'Instruction profile unavailable: {exc}'
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
             self._count_status = f'Instruction profile unavailable: {exc}'
-        if changed or previous_status != self._count_status:
+        if changed or previous_status != self._count_status or previous_warning != self._profile_input_warning:
             self._show_resources()
 
     def _request_stack(self) -> None:
@@ -516,8 +620,13 @@ class DebuggerApp(App):
             self._log(f'Connected to {self.remote}; ELF: {self.elf}')
             if self._trace is None:
                 try:
-                    self._trace = TraceWriter(self.elf, self.remote, self.history_dir)
+                    self._trace = TraceWriter(self.elf, self.remote, self.history_dir,
+                                              elf_sha256=self.catalog.sha256 if self.catalog else None)
                     self._log(f'JSONL recording: {self._trace.path}')
+                    if self.catalog and not self.profile_history_path:
+                        self._profile_reader = JsonlTail(self._trace.path, offset=self._trace.start_offset)
+                        self._profile_history = ProfileHistory(self.catalog, session=self._trace.session,
+                                                               profile=self.instruction_counts)
                 except OSError as exc:
                     self._log(f'JSONL recording unavailable: {exc}')
             self._send(f'-symbol-info-variables --max-results {MAX_GLOBAL_WATCHES + 1}',
@@ -530,7 +639,7 @@ class DebuggerApp(App):
             code = f'python exec(compile(open({helper!r}).read(), {helper!r}, "exec"))'
             self._send(f'-interpreter-exec console "{self._quoted(code)}"', 'stack_observer')
             if self.energy_model:
-                self.set_energy_model(self.energy_model)
+                self.set_energy_model(self.energy_model, source=self._energy_source, override=self._energy_override)
         elif purpose == 'stack_observer':
             self._stack_ready = True
             self._request_stack()

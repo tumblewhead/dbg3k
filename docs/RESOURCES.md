@@ -46,6 +46,52 @@ Energy bars represent **estimated energy, not measured power**. With one common
 charge-per-instruction model for all functions, energy ordering is necessarily
 the same as instruction ordering. Peripheral/idle contributions remain excluded.
 
+## Reliable energy updates and recorded profiles
+
+Live profile snapshots are validated, appended as cumulative `instruction_profile`
+events, then consumed incrementally from the active session's JSONL stream for
+the rankings. A temporary missing/partial snapshot file or unavailable history
+read retains the last validated result with a source/status message. A failed
+history write falls back to validated live data and closes the failed writer.
+Wrong-build or inconsistent live data is still rejected.
+
+On a normal live launch, explicit energy assumptions previously recorded for the
+**same ELF SHA256** are restored from matching history files. CLI values and new
+choices made through **Model…** or the Energy model palette command take
+precedence. Restored values and their source session are displayed; review them
+when changing hardware. No chip defaults are invented. If assumptions have never
+been recorded, measured work still populates the energy table while energy cells
+remain unavailable; the Model button opens the assumption editor.
+
+You can instead follow an existing or growing JSONL file:
+
+```sh
+dbg3k examples/an505/firmware.elf \
+  --profile-history dbg3k-history/firmware_YYYY-MM-DD.jsonl \
+  --profile-session SESSION_UUID
+```
+
+Use a real path/date and a session UUID from a `session_start` record. Omit
+`--profile-session` to follow the newest matching session **with a valid profile**;
+late writes from older sessions cannot supersede it. This selects the profiling
+source; GDB attachment retains its normal behavior. `--profile-history` and
+`--instruction-profile` are mutually exclusive. The display labels recorded run
+data separately from live GDB state. Replaying a session uses that session's
+recorded assumptions unless you explicitly override them via CLI or Model…;
+assumptions from another recorded session are not silently attached during replay.
+
+The reader processes appended bytes in bounded batches (~4 polls/sec), buffers
+partial UTF-8/JSON lines until newline, skips malformed records, and detects file
+replacement/truncation. Large files catch up progressively with a queued-byte
+indicator. Cumulative snapshots **replace** prior totals; they are never summed.
+Session/build/run identity and monotone sequence validation prevent mixing runs
+or double-counting repeated events. A QEMU run UUID change resets counters.
+
+Older logs without `entry_hits` show unavailable Calls/Instr-per-entry rather
+than invented zeroes. Logs containing only debugger stops or return observations
+cannot supply guest instruction counts or energy estimates; valid recorded
+instruction profiles are required.
+
 | Pane | Evidence and scope |
 | --- | --- |
 | Stack frames and stack watch | GDB-visible frame count, active instances of the selected emitted function, available SP/MSP/PSP registers, unwound-SP frame contribution and inclusive estimates, sampled peaks |
