@@ -41,7 +41,7 @@ class TraceTests(unittest.TestCase):
         self.assertEqual(trace_filename("/tmp/c-main-arm/demo.elf", d),
                          "demo_2026-11-15.jsonl")
         self.assertEqual(trace_filename("/tmp/weird target?.elf", d),
-                         "weird_target__2026-11-15.jsonl")
+                         "weird_target_2026-11-15.jsonl")
 
     def test_returns_copy_all_events_from_this_session_only(self):
         with TemporaryDirectory() as folder:
