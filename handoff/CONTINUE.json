@@ -5,27 +5,28 @@
   "canonical_branch": "main",
   "working_branch": "feature/m0-1-mi-textual-scope-001",
   "milestone": "M0.1",
-  "status": "THREAD_WATCH_QUERY_FIXED_CLIPBOARD_UI_ADDED_PENDING_ARCH_TEST",
+  "status": "GLOBALS_WATCHES_CI_PASSED_PENDING_ARCH_RETTEST",
   "validated": [
     "User reports Textual TUI launches",
     "User reports clicking a scope-tree function shows source",
     "Ten MI parser and scope-model unit tests in builder",
     "Python compileall in builder",
-    "15 pure-Python MI/parser/model/thread-command tests pass in builder"
+    "15 pure-Python MI/parser/model/thread-command tests pass in builder",
+    "User confirmed frame-local watches populate correctly on Arch/QEMU after --thread fix",
+    "Global symbol parsing and model/history tests passed in GitHub Actions"
   ],
   "unvalidated": [
     "Live Textual VerticalScroll behavior on Arch",
-    "Actual GDB/MI local-variable results and watch updates",
     "QEMU AN505 example build/run in builder",
-    "Thread discovery + watches on user's actual QEMU/GDB",
-    "Textual OSC52 clipboard with user's terminal, keyboard focus, and CLI input"
+    "Textual OSC52 clipboard with user's terminal, keyboard focus, and CLI input",
+    "Real QEMU/GDB global and file-static value reads from AN505 ELF"
   ],
   "next": [
-    "User retest on Arch: pull branch, debug AN505, step from Reset_Handler into main/foo/bar, confirm watches",
-    "Test mouse drag Ctrl+C, y line, Y full source, W tab-separated watches, L console transcript, F2/: CLI input/paste",
-    "If watch error persists capture GDB MI -thread-info and -stack-list-variables --thread T --frame N --all-values and user terminal info",
-    "Add integration simulator tests for asynchronous stop/thread/frame/vars replies and Textual command input focus",
-    "Continue with independent source navigator, assembly/register panels, and QEMU TCG instruction counters"
+    "User retest: pull feature branch; verify main.c::total appears in globals group at Reset_Handler and while stepping in main/foo/bar",
+    "Check global value-change glyph, stop history sparkline, copy W, and local watches regression",
+    "If missing, record -symbol-info-variables debug output and -data-evaluate-expression \"'main.c'::total\" on user's GDB",
+    "Develop selectable/pinned globals beyond first 64, full async integration tests, and dynamic expression watches",
+    "Repair hardcoded blue theme CSS and Rich palette; advance static .text, stack and instruction profiling"
   ],
   "decisions": [
     "Scope tree canonical",
@@ -38,9 +39,9 @@
   ],
   "limitations": [
     "no measured instruction/stack/energy profiles",
-    "no pin watches or globals",
     "histories are sampled stops only",
-    "cannot see calls entirely between halts"
+    "cannot see calls entirely between halts",
+    "no pin UI; globals show first 64 discoverable debug symbols"
   ],
   "references": [
     "CONTINUE.md",
@@ -49,13 +50,15 @@
     "docs/DESIGN.md",
     "docs/CONVERSATION_NOTES.md"
   ],
-  "summary": "After real GDB error 'Cannot specify --frame without --thread', added thread-info/current-thread discovery and thread-qualified locals queries. Added y/Y/W/L clipboard actions and F2/: GDB CLI input.",
+  "summary": "User confirmed locals work. Added GDB/MI global/file-static discovery and per-stop value retrieval to watch table/scope tree, same bounded histories, stale reply guard, unit tests; target retest pending.",
   "known_issues": {
     "reported": [
-      "Source stuck displaying ~20-33 lines",
-      "Local watches never appear",
-      "Copy/paste of source and debugger output not practical; clipboard shortcuts and editable GDB command input now added"
+      "Global and file-static variables not previously shown (new implementation awaiting Arch retest)",
+      "Hardcoded blue theme CSS does not respond consistently to theme change",
+      "Advanced stack, .text, guest-instruction and modeled energy attribution not implemented",
+      "Source scrolling and clipboard patches still require complete user verification"
     ],
-    "watch_root_cause": "Confirmed GDB requires --thread when --frame is specified; patched, awaiting live validation"
+    "watch_root_cause": "Resolved for locals according to user: --thread and --frame provided",
+    "globals": "Implemented and CI-tested; static AN505 total should show as main.c::total, but no live target receipt yet"
   }
 }
