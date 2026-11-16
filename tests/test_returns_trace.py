@@ -83,5 +83,22 @@ class TraceTests(unittest.TestCase):
             writer.close()
 
 
+    def test_new_session_resynchronizes_after_crash_fragment(self):
+        with TemporaryDirectory() as folder:
+            d = datetime(2026, 11, 15, 21, tzinfo=timezone.utc)
+            path = Path(folder) / "demo_2026-11-15.jsonl"
+            path.write_text('{"broken":', encoding="utf-8")
+            writer = TraceWriter("demo.elf", "localhost:1234", folder,
+                                 now=d, session="recovered")
+            writer.record("return", stop=1, thread="1", caller="foo",
+                          callee="bar", callee_display="bar(4)", value="12",
+                          origin="gdb-mi-function-finished")
+            writer.close()
+            lines = path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(lines), 4)  # partial + session start + return + end
+            self.assertEqual(json.loads(lines[1])["kind"], "session_start")
+            self.assertEqual(json.loads(lines[2])["kind"], "return")
+
+
 if __name__ == "__main__":
     unittest.main()
