@@ -30,6 +30,14 @@ Every object includes: **schema="dbg3k.trace.v1"**, **kind**, **session**, **seq
 | return | stop, thread, caller, callee, callee_display, value, optional caller_frame, origin, optional stop_anchor |
 | gdb_error | stop, purpose, message |
 | session_end | target |
+| stack_sample | stop, thread, registers (unavailable values null), frames (level/function/PC/SP/kind), origin=gdb-unwound-registers |
+| instruction_profile | ELF SHA256, QEMU run UUID, profile_seq (separate from JSONL envelope seq), total, unknown, complete, exclusive counts by emitted body, origin=qemu-plugin-instruction-dispatch |
+| energy_model | ua_per_mhz, mips_per_mhz, voltage, origin=user-configured-active-core-model |
+
+Instruction snapshots are periodic cumulative QEMU-run dispatch counts, not
+stop-synchronized instruction traces. Stack samples are accepted only for the
+current halted stop/thread. Energy model entries record assumptions, not power
+measurements. See [RESOURCES.md](RESOURCES.md).
 
 Illustrative return record (not actual simulation data):
 
