@@ -3,7 +3,7 @@
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/graphical-resource-views` (based on PR #5's branch)
 **Review:** https://github.com/tumblewhead/dbg3k/pull/6 (draft, stacked on PR #5)
-**Current stage:** Graphical stack map/raw bytes, sortable whole-run instruction/call-proxy Pareto and energy ranking; 53 local tests pass including actual QEMU/GDB.
+**Current stage:** Graphical stack map/raw bytes, sortable whole-run instruction/call-proxy Pareto and energy ranking; 53 local tests and source CI pass, including actual QEMU/GDB.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
@@ -39,7 +39,8 @@ retention, cumulative 95% with 5% unknown, energy unavailable states, address
 ordering, bytes and stale-sample rejection. Preview PNGs/SVGs were generated and
 visually inspected in /tmp/dbg3k-graph-previews using explicitly marked synthetic
 fixtures; they are not target evidence. Compileall and whitespace checks pass.
-No local test failures. See compact handoff/graphical-validation.json.
+No local test failures. Source checkpoint `59be199` passed both CI jobs in run
+43834476319, including actual QEMU8.2/GDB. See compact handoff/graphical-validation.json.
 
 Review: PR #6 is open against feature/stack-instruction-energy. Next: check CI,
 restart dbg3k on the graphical branch,
