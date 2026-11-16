@@ -74,6 +74,7 @@ class ScopeModel:
     def __init__(self) -> None:
         self.frames: list[Frame] = []
         self.watches: dict[tuple[int, int, str], Watch] = {}
+        self.global_watches: dict[str, Watch] = {}
         self._frame_signatures: dict[int, tuple[str, str]] = {}
         self._generations: dict[int, int] = {}
         self._serial = 0
@@ -133,3 +134,23 @@ class ScopeModel:
     def active_watches(self, level: int | None = None) -> list[Watch]:
         return [w for w in self.watches.values()
                 if w.active and (level is None or w.frame_level == level)]
+
+    def set_global_value(self, key: str, label: str, name: str,
+                         value: str, type_name: str = '') -> None:
+        """Observe one persistent global at the current debugger stop."""
+        watch = self.global_watches.get(key)
+        if watch is None:
+            watch = Watch(label, -1, 0, name, key)
+            self.global_watches[key] = watch
+        if watch.observed_stop != self.stop:
+            watch.previous = watch.value if watch.observed_stop >= 0 else None
+            watch.value = value
+            watch.observed_stop = self.stop
+            number = number_of(value, type_name)
+            if number is not None:
+                watch.numeric.append(number)
+        watch.type_name = type_name
+        watch.active = True
+
+    def active_globals(self) -> list[Watch]:
+        return [watch for watch in self.global_watches.values() if watch.active]
