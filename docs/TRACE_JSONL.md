@@ -33,6 +33,17 @@ Every object includes: **schema="dbg3k.trace.v1"**, **kind**, **session**, **seq
 | stack_sample | stop, thread, registers (unavailable values null), frames (level/function/PC/SP/kind), optional memory (start, hex; cap 256 bytes), memory_error, origin=gdb-unwound-registers |
 | instruction_profile | ELF SHA256, QEMU run UUID, profile_seq (separate from JSONL envelope seq), total, unknown, complete, exclusive counts and entry_hits by emitted body, origin=qemu-plugin-instruction-dispatch |
 | energy_model | ua_per_mhz, mips_per_mhz, voltage, origin=user-configured-active-core-model |
+| debugger_metadata | GDB version, architecture, connection and available frame/thread metadata |
+| observation_config | stop, enabled, selected expressions, expansion limits |
+| observation | observation_version=1, stop, thread, expression, scope, status, type/value/raw when available, errors, truncated, limits, request, origin |
+
+`session_start` additionally carries `executable` (path, SHA256, GNU build ID when
+present) and dbg3k version. These additions preserve `dbg3k.trace.v1` and all old
+kinds. Ignore unknown fields/kinds. Opt-in observations use GDB typed values,
+ordered fields/elements, decimal integer strings and hex pointer addresses.
+They do not parse existing watch strings. See [OBSERVATIONS.md](OBSERVATIONS.md)
+for the complete versioned encoding, CLI/palette selection, limits, query and
+reproducible real Kodama qualification.
 
 New session-start and energy-model records also include `elf_sha256` where the
 ELF is available; energy-model `source` describes CLI/user/restored provenance.

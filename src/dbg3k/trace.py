@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 from typing import Any
 from uuid import uuid4
+from importlib.metadata import version, PackageNotFoundError
 
 
 SCHEMA = "dbg3k.trace.v1"
@@ -27,7 +28,7 @@ def trace_filename(elf: str | Path, timestamp: datetime) -> str:
 class TraceWriter:
     def __init__(self, elf: str | Path, remote: str, directory: str | Path,
                  *, now: datetime | None = None, session: str | None = None,
-                 elf_sha256: str | None = None) -> None:
+                 elf_sha256: str | None = None, build_id: str | None = None) -> None:
         stamp = now or datetime.now().astimezone()
         self.target = Path(elf).stem
         self.session = session or uuid4().hex
@@ -49,8 +50,15 @@ class TraceWriter:
         self.sequence = 0
         self.closed = False
         self.start_offset = self._file.tell()
+        try:
+            tool_version = version('dbg3k')
+        except PackageNotFoundError:
+            tool_version = None
         self.record("session_start", elf=str(Path(elf).expanduser().resolve()),
-                    remote=remote, target=self.target, elf_sha256=elf_sha256)
+                    remote=remote, target=self.target, elf_sha256=elf_sha256,
+                    executable=dict(path=str(Path(elf).expanduser().resolve()),
+                                    sha256=elf_sha256, build_id=build_id),
+                    tool_versions=dict(dbg3k=tool_version))
 
     def record(self, kind: str, **fields: Any) -> None:
         if self.closed:

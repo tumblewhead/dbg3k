@@ -33,6 +33,9 @@ from .resources import CodeCatalog, StackProfile, InstructionProfile, EnergyMode
 from .resource_ui import resource_text
 from .graph_ui import StackMap, RunRanking
 from .graph_model import current_bodies
+from .observations import (select_expressions, decode_message, PREFIX,
+                           PROVENANCE_PREFIX, LIMITS)
+from .observation_ui import ObservationsScreen
 
 class DebuggerApp(App):
     TITLE = 'dbg3k'
@@ -118,7 +121,7 @@ class DebuggerApp(App):
     def __init__(self, elf: str, gdb: str, remote: str,
                  history_dir: str = "dbg3k-history", instruction_profile: str | None = None,
                  energy_model: EnergyModel | None = None, profile_history: str | None = None,
-                 profile_session: str | None = None) -> None:
+                 profile_session: str | None = None, observations=()) -> None:
         super().__init__()
         self.elf, self.remote = elf, remote
         self.history_dir = history_dir
@@ -157,6 +160,16 @@ class DebuggerApp(App):
                                                        profile=self.instruction_counts)
         self._trace: TraceWriter | None = None
         self._trace_error_reported = False
+        self.observation_expressions = select_expressions(observations)
+        self.observation_enabled = bool(self.observation_expressions)
+        self.observation_status = 'Not captured yet'
+        self._observation_ready = False
+        self._observation_error = ''
+        self._observation_request = 0
+        self._observation_pending = {}
+        self._observation_last = None
+        self._result_context = {}
+        self._stop_payload = None
         self._returns = ReturnLedger()
         self._probe_returns_since_command: set[tuple[str, str, str]] = set()
         # Stable tree branches: only live frames are rebuilt at each GDB reply.
@@ -239,6 +252,8 @@ class DebuggerApp(App):
                             self.action_choose_views)
         yield SystemCommand('Energy model', 'Configure µA/MHz, MIPS/MHz and voltage assumptions',
                             self.action_energy_model)
+        yield SystemCommand('Observation capture', 'Select expressions; start/stop structured JSONL capture',
+                            self.action_observation_capture)
         for key, (label, _) in VIEWS.items():
             enabled = key in self.visible_views
             yield SystemCommand(
@@ -255,6 +270,20 @@ class DebuggerApp(App):
 
     def action_energy_model(self) -> None:
         self.push_screen(EnergyScreen())
+
+    def action_observation_capture(self) -> None:
+        self.push_screen(ObservationsScreen())
+
+    def set_observations(self, expressions, enabled=True) -> None:
+        self.observation_expressions = select_expressions(expressions)
+        self.observation_enabled = enabled and bool(self.observation_expressions)
+        self._trace_record('observation_config', stop=self.model.stop,
+                           enabled=self.observation_enabled, expressions=self.observation_expressions,
+                           limits=LIMITS)
+        self._log(f'Observation capture {"on" if self.observation_enabled else "off"}: '
+                  f'{len(self.observation_expressions)} selected expressions')
+        if self.observation_enabled:
+            self._request_observations()
 
     def action_toggle_view(self, key: str) -> None:
         self.set_visible_views(self.visible_views ^ {key})
@@ -367,6 +396,9 @@ class DebuggerApp(App):
         try:
             token = self.transport.send(command)
             self.pending[token] = (purpose, level)
+            if purpose in ('frames', 'vars', 'args', 'global_value', 'thread_info',
+                           'stack_snapshot', 'observation_capture'):
+                self._result_context[token] = (self.model.stop, self._active_thread)
             if purpose in ('execution', 'console', 'break_add', 'break_del'):
                 self._trace_record('command', stop=self.model.stop,
                                    gdb_command=command, purpose=purpose)
@@ -515,9 +547,81 @@ class DebuggerApp(App):
             code = f'python dbg3k_stack_snapshot({self.model.stop})'
             self._send(f'-interpreter-exec console "{code}"', 'stack_snapshot')
 
+    def _request_observations(self) -> None:
+        key = (self.model.stop, self._active_thread, self.observation_expressions)
+        if (not self.observation_enabled or
+                self.status != 'HALTED' or not self._active_thread or self._trace is None or
+                self._observation_last == key):
+            return
+        if not self._observation_ready:
+            if self._observation_error:
+                self._observation_last = key
+                for expression in self.observation_expressions:
+                    self._trace_record('observation', observation_version=1, stop=self.model.stop,
+                        thread=self._active_thread, expression=expression,
+                        scope=dict(thread=self._active_thread, frame=dict(level=0)),
+                        status='unavailable', truncated=False, limits=LIMITS,
+                        errors=[dict(path='$', code='collector-unavailable', message=self._observation_error)],
+                        origin='dbg3k-capture-diagnostic')
+            return
+        self._observation_last = key
+        self._observation_request += 1
+        request = self._observation_request
+        code = f'python dbg3k_observe({request}, {self.model.stop}, {self._active_thread!r}, {list(self.observation_expressions)!r})'
+        token = self._send(f'-interpreter-exec console "{self._quoted(code)}"', 'observation_capture')
+        if token is not None:
+            self._observation_pending[request] = dict(token=token, stop=self.model.stop,
+                thread=self._active_thread, remaining=set(self.observation_expressions))
+
+    def _accept_observation(self, data) -> None:
+        request = self._observation_pending.get(data.get('request'))
+        if request is None:
+            return
+        expression = data.get('expression')
+        if expression not in request['remaining']:
+            return
+        # A queued step sets COMMANDING before GDB drains this read. Its
+        # response still precedes *running and belongs to the issuing stop.
+        if (data.get('stop') != request['stop'] or data.get('thread') != request['thread'] or
+                self.model.stop != request['stop'] or self.status not in ('HALTED', 'COMMANDING')):
+            self._log(f'Observation discarded: stale stop/context for {expression}')
+            return
+        request['remaining'].remove(expression)
+        self._trace_record('observation', **data)
+        self.observation_status = f'Stop {data["stop"]}: {expression}: {data.get("status", "error")}'
+        if data.get('status') != 'ok':
+            self._log('Observation ' + self.observation_status)
+
+    def _finish_observation_request(self, token, message=None) -> None:
+        for request_id, request in list(self._observation_pending.items()):
+            if request['token'] != token:
+                continue
+            for expression in sorted(request['remaining']):
+                self._trace_record('observation', observation_version=1, request=request_id,
+                    stop=request['stop'], thread=request['thread'], expression=expression,
+                    scope=dict(thread=request['thread'], frame=dict(level=0)),
+                    status='error', truncated=False, limits=LIMITS,
+                    errors=[dict(path='$', code='capture-error', message=message or 'Missing collector reply')],
+                    origin='dbg3k-capture-diagnostic')
+            if request['remaining']:
+                self.observation_status = message or 'Incomplete collector reply; see JSONL errors'
+                self._log('Observation capture: ' + self.observation_status)
+            del self._observation_pending[request_id]
+
     def _handle(self, record: Record) -> None:
         if record.kind in ('~', '@', '&'):
             message = str(record.payload).strip()
+            if record.kind == '~' and message.startswith(PREFIX):
+                data = decode_message(message)
+                if data is not None:
+                    self._accept_observation(data)
+                return
+            if record.kind == '~' and message.startswith(PROVENANCE_PREFIX):
+                data = decode_message(message, PROVENANCE_PREFIX)
+                if data is not None:
+                    self._trace_record('debugger_metadata', **data, remote=self.remote,
+                                       origin='gdb-python')
+                return
             stack = decode_stack(message) if record.kind == '~' else None
             if stack is not None:
                 if (self.status == 'HALTED' and stack['stop'] == self.model.stop and
@@ -551,6 +655,8 @@ class DebuggerApp(App):
             old_top = self.model.frames[0] if self.model.frames else None
             payload = record.payload if isinstance(record.payload, dict) else {}
             next_stop = self.model.stop + 1
+            self.model.begin_stop()
+            self._stop_payload = payload
             self._last_return = observed_return(payload, old_top, next_stop)
             thread = payload.get('thread-id')
             self._trace_record('stop', stop=next_stop, reason=payload.get('reason'),
@@ -583,6 +689,14 @@ class DebuggerApp(App):
         if record.kind != '^':
             return
         purpose, level = self.pending.pop(record.token, ('unknown', None))
+        context = self._result_context.pop(record.token, None)
+        if purpose == 'observation_capture':
+            self._finish_observation_request(record.token, record.payload.get('msg') if record.cls == 'error' else None)
+        if context is not None and (context[0] != self.model.stop or self.status != 'HALTED' or
+                (purpose != 'thread_info' and context[1] != self._active_thread)):
+            self._global_result_stop.pop(record.token, None)
+            self._argument_result_stop.pop(record.token, None)
+            return
         global_result_stop = self._global_result_stop.pop(record.token, None)
         argument_result_stop = self._argument_result_stop.pop(record.token, None)
         if record.cls == 'error':
@@ -591,6 +705,11 @@ class DebuggerApp(App):
                                message=record.payload.get('msg', 'GDB error'))
             if purpose == 'return_observer':
                 self._log('Automatic returns unavailable (GDB Python required); use o / finish to observe returns.')
+            if purpose == 'observation_observer':
+                self.observation_status = 'Unavailable: GDB Python collector failed to load'
+                self._observation_error = self.observation_status
+                self._log(self.observation_status)
+                self._request_observations()
             if purpose in ('stack_observer', 'stack_snapshot'):
                 self._stack_error = str(record.payload.get('msg', 'GDB Python stack query failed'))
                 self._show_resources()
@@ -617,12 +736,22 @@ class DebuggerApp(App):
         elif purpose == 'connect':
             self._connected = True
             self.status = 'HALTED'
+            if not self.model.stop:
+                self.model.begin_stop()
             self._log(f'Connected to {self.remote}; ELF: {self.elf}')
             if self._trace is None:
                 try:
                     self._trace = TraceWriter(self.elf, self.remote, self.history_dir,
-                                              elf_sha256=self.catalog.sha256 if self.catalog else None)
+                                              elf_sha256=self.catalog.sha256 if self.catalog else None,
+                                              build_id=getattr(self.catalog, 'build_id', None))
                     self._log(f'JSONL recording: {self._trace.path}')
+                    initial = self._stop_payload or record.payload
+                    self._trace_record('stop', stop=self.model.stop, reason=initial.get('reason', 'attached'),
+                                       thread=initial.get('thread-id'), frame=initial.get('frame'),
+                                       origin='gdb-mi-attach-current-stop')
+                    self._trace_record('observation_config', stop=self.model.stop,
+                                       enabled=self.observation_enabled, expressions=self.observation_expressions,
+                                       limits=LIMITS)
                     if self.catalog and not self.profile_history_path:
                         self._profile_reader = JsonlTail(self._trace.path, offset=self._trace.start_offset)
                         self._profile_history = ProfileHistory(self.catalog, session=self._trace.session,
@@ -638,11 +767,20 @@ class DebuggerApp(App):
             helper = str(Path(__file__).with_name('gdb_resources.py').resolve())
             code = f'python exec(compile(open({helper!r}).read(), {helper!r}, "exec"))'
             self._send(f'-interpreter-exec console "{self._quoted(code)}"', 'stack_observer')
+            helper = str(Path(__file__).with_name('gdb_observations.py').resolve())
+            code = (f'python _dbg3k_obs_ns={{"__file__": {helper!r}}}; '
+                    f'exec(compile(open({helper!r}).read(), {helper!r}, "exec"), _dbg3k_obs_ns); '
+                    'dbg3k_observe=_dbg3k_obs_ns["dbg3k_observe"]; '
+                    'dbg3k_provenance=_dbg3k_obs_ns["dbg3k_provenance"]; dbg3k_provenance()')
+            self._send(f'-interpreter-exec console "{self._quoted(code)}"', 'observation_observer')
             if self.energy_model:
                 self.set_energy_model(self.energy_model, source=self._energy_source, override=self._energy_override)
         elif purpose == 'stack_observer':
             self._stack_ready = True
             self._request_stack()
+        elif purpose == 'observation_observer':
+            self._observation_ready = True
+            self._request_observations()
         elif purpose == 'return_observer':
             self._log('Automatic returns: tracking debug-visible functions encountered at stops.')
         elif purpose == 'thread_info':
@@ -751,12 +889,12 @@ class DebuggerApp(App):
             self._show_watches()
 
     def _refresh(self) -> None:
-        self.model.begin_stop()
         self.selected_level = 0
         frame_command = (f'-stack-list-frames --thread {self._active_thread}'
                          if self._active_thread else '-stack-list-frames')
         self._send(frame_command, 'frames')
         self._request_stack()
+        self._request_observations()
         self._show_status()
 
     def _show_status(self) -> None:

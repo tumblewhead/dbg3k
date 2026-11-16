@@ -74,6 +74,15 @@ Sort by `.text` bytes, exclusive/inclusive instructions, stack own vs peak, appr
 
 ## Separation of concerns
 
+Selected structured observations extend the same `dbg3k.trace.v1` journal.
+The generic GDB Python collector reads typed bounded field/array trees; the
+transport remains MI, the contract/selector validation is independent of the UI,
+and Textual only configures capture. Requests bind stop/thread/frame context;
+late responses cannot mutate a newer stop. No Kodama layout is embedded in the
+exporter. A future Kodama projection consumes observed fields with build/layout
+awareness and keeps derived scheduler interpretations separate. See
+[OBSERVATIONS.md](OBSERVATIONS.md).
+
 - GDB/MI: source, frames, locals, breakpoints, registers, halt and exception events.
 - QEMU plugin (later): executed instruction and optionally SP/call trace with low overhead.
 - Scope model: identifiers, histories, attribution and provenance.

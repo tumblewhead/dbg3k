@@ -1,13 +1,63 @@
 # dbg3k: development history and continuation
 
 **Repository:** https://github.com/tumblewhead/dbg3k
-**Working branch:** `fix/energy-history-updates` (based on PR #6's branch)
-**Review:** https://github.com/tumblewhead/dbg3k/pull/7 (draft, stacked on PR #6)
-**Current stage:** Incremental JSONL profiling, sticky build-matched energy assumptions and transient-IO recovery; 61 local checks and source CI pass, user retest pending.
+**Working branch:** `feature/structured-observations` (based on PR #7's branch)
+**Review:** https://github.com/tumblewhead/dbg3k/pull/8 (draft, stacked on PR #7)
+**Current stage:** Selected typed observations extend dbg3k.trace.v1; all68 local checks and both source CI jobs pass. Real pinned Kodama ARM/QEMU qualified locally; owner review and current-layout/terminal retest pending.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
+
+### 2026-11-16: structured stop observations for Kodama tooling
+
+Final source `e178475` passed both Python and actual ARM/QEMU CI jobs in run
+43945295595. Real Kodama CI is explicitly skipped without KODAMA_READ_TOKEN;
+its actual pinned ELF passed locally. All68 local tests, compileall and whitespace
+checks pass. Review PR#8; pull feature/structured-observations and use Ctrl+P >
+Observation capture or repeated --observe flags. Schema/demo/receipt links below.
+
+Extended the existing dbg3k.trace.v1 journal rather than adding a parallel
+exporter. Opt-in --observe selectors and Ctrl+P > Observation capture select
+expressions/start/stop collection. A generic isolated GDB Python helper exports
+typed ordered fields/arrays, exact expressions, GDB raw summaries, decimal-string
+integers, hex pointers and field/expression errors. Pointers are not implicitly
+followed; explicitly selected dereferences guard null and preserve read failures.
+Calls/assignments/arithmetic are excluded; inferior calls are disabled during
+capture. Node/child/depth/raw/value-size/record-size/cooperative time limits are
+recorded. Missing Python produces unavailable records. No Kodama semantics or
+target firmware changes were introduced.
+
+Session provenance adds ELF SHA256/build ID and dbg3k/GDB versions/architecture.
+Each actual MI stop advances the stop index; refreshes no longer invent stops.
+Capture request identity and stop/thread checks prevent late results from being
+assigned to newer stops. Existing frames/locals/args/globals also reject stale
+replies. Attach has an explicit initial stop even when MI emits no stopped event.
+
+Local Kodama checkout contains uncommitted layout changes; it was left untouched.
+Built a clean git-archive of requested branch revision2679a470 in /tmp. Actual
+AN505 capture observed worker slot1 active1/generation1/waiting1 and seen0->1 at
+kodama_signal then kodama_signal_and_pend; captured tasks/running/levels/ticks/
+g_cmd plus explicit invalid-expression errors. Independent MI queries agree on
+seen and task-array type. Generic ARM tests cover UINT64_MAX, nested fields,
+changing scalar, null vs stale pointers, guarded failures and truncated arrays.
+The 66-test full local suite passed with real GDB/QEMU/plugin enabled; an added
+missing-collector test passes too. Final full rerun passes all67 checks; compileall/whitespace pass. PR#8 open. Initial CI Python passed; QEMU job could not access Kodama with the default repository token. Cross-repository qualification is now conditional on KODAMA_READ_TOKEN; generic ARM checks always run. Second CI exposed a missing math dependency in GDB helper imports and a generic flash fixture incorrectly using the SRAM loader. Collector imports were minimized; generic fixture now uses the proven -kernel boot path while Kodama retains its explicit-MSP SRAM loader. Focused local real-ARM rerun passes; Third CI confirmed helper loads, but PC0x14 exposed a GNU build-ID note ahead of the reset vectors on Ubuntu's linker. Fixture now explicitly places the note after .text and verifies vector base/MSP/reset entry; local focused capture passes, CI pending.
+
+Retained issues during work: sandbox denied localhost socket creation (approved
+rerun passed); first regression run exposed a synthetic catalog without build_id
+(getattr fallback fixed); one documentation patch context mismatch was corrected.
+
+Final local suite passes all68 checks, including capture replies drained after a
+step is queued but before GDB reports running. Those remain valid at the issuing
+stop; truly stale replies still fail explicitly. Both CI jobs passed checkpoint
+fe1c5c4 in run43944773286 (Ubuntu QEMU8.2/GDB15; real Kodama CI explicitly skipped
+without cross-repository token, independently qualified locally). Final ordering
+checkpoint CI pending. User histories and dirty Kodama work remain untouched.
+
+Schema/query/example/demo: docs/OBSERVATIONS.md. No physical hardware, continuous
+event reconstruction, arbitrary C++ expression decoder or Kodama-specific pane
+is claimed. Machine receipt: handoff/observations-validation.json.
 
 ### 2026-11-16: energy ranking reliability and JSONL updates
 

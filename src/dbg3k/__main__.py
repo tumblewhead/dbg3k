@@ -13,6 +13,8 @@ def main():
     profiles.add_argument('--instruction-profile', type=Path, help='Atomic JSON snapshot written by QEMU counts plugin')
     profiles.add_argument('--profile-history', type=Path, help='Read and follow recorded instruction/energy JSONL events')
     p.add_argument('--profile-session', help='Pin --profile-history to one debugger session UUID (default: newest matching profile session)')
+    p.add_argument('--observe', action='append', default=[], metavar='EXPRESSION',
+                   help='Capture this read-only selector at each stop (repeatable; up to 16) in the existing JSONL trace')
     p.add_argument('--ua-per-mhz', type=float, help='Assumed active current slope (µA/MHz)')
     p.add_argument('--mips-per-mhz', type=float, help='Assumed instruction throughput (MIPS/MHz)')
     p.add_argument('--voltage', type=float, help='Assumed supply voltage (V)')
@@ -23,6 +25,11 @@ def main():
         p.error(f"ELF not found: {args.elf}")
     from .app import DebuggerApp
     from .resources import EnergyModel
+    from .observations import select_expressions
+    try:
+        select_expressions(args.observe)
+    except ValueError as exc:
+        p.error(str(exc))
     energy = None
     values = (args.ua_per_mhz, args.mips_per_mhz, args.voltage)
     if any(value is not None for value in values):
@@ -37,7 +44,7 @@ def main():
                 instruction_profile=str(args.instruction_profile) if args.instruction_profile else None,
                 energy_model=energy,
                 profile_history=str(args.profile_history) if args.profile_history else None,
-                profile_session=args.profile_session).run()
+                profile_session=args.profile_session, observations=args.observe).run()
 
 if __name__ == "__main__":
     main()
