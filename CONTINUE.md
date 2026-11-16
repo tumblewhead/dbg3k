@@ -3,7 +3,7 @@
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/m0-1-mi-textual-scope-001`
 **Review:** https://github.com/tumblewhead/dbg3k/pull/1 (draft)
-**Current stage:** M0.1 user-feedback fixes, pending live retest on Arch Linux.
+**Current stage:** M0.1 TUI refinements with theme/args/returns/history, CI passing, awaiting Arch/QEMU end-to-end test.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
@@ -62,6 +62,21 @@ Feature branch `feature/m0-1-mi-textual-scope-001` created. Python GDB/MI parser
 **Validation:** GitHub Actions unit tests, TUI import check and compileall passed at commit `bd9aeac`; further event-flow tests and docs are being added. Actual global value retrieval on Arch/QEMU remains unverified. Do not claim globals work on the target without a run receipt.
 
 **Known limitations:** first 64 enumerated debug globals, no pin/search or pagination; no continuously sampled watch values while running; optimized-out/unreadable symbols may show `<unavailable>`; GDB expression qualification on full source paths and nontrivial C++ globals needs real-target checks. Static source symbols absent from DWARF cannot be discovered.
+
+
+### 2026-11-15: whole-app themes, call signatures/returns, and watch trace UX
+
+**User request:** The palette changed theme but almost all application panels stayed blue; function nodes should display actual argument values such as `foo(2)`, and the caller should show a return arrow `↳ foo(2) ⟵ 4`; histories should start as raw numbers, transform into a sparkline from three numeric samples onward, provide ten recent values on hover, and make the complete retained history copyable.
+
+**Implementation:** `src/dbg3k/app.py` is now theme-token-based for the entire Textual layout (background/surface/panel/foreground/accent/borders/tooltip). The Rich source pane derives colors from `current_theme` and redraws if the selected theme changes. GDB `-stack-list-arguments --thread T --all-values 0 N` populates argument tuples on active `Frame` objects; call-tree labels are formatted by `src/dbg3k/calltree.py`. On a genuine `*stopped,reason="function-finished"` event, the caller's node gets the returned function and GDB-reported value. This return marker is stop-scoped and MUST NOT be inferred from ordinary `next` / unknown return values.
+
+**Watch UX:** `src/dbg3k/watch_ui.py` displays independent theme-aware `WatchRow` widgets. One or two numeric readings show `[1]` / `[1, 2]`; at three readings, display a 24-character sparkline. Hover the history cell for ten most recent (stop-number, raw value) observations. Click a watch row to copy that watch's complete retained history; `H` exports TSV for all watches including expired stack scopes; `W` remains current snapshot copy. Host-side history is now 4096 samples per watch (capped, not unbounded). Local and global watchers share this infrastructure.
+
+**Tests:** `tests/test_ux.py` checks argument parsing, return provenance, missing-return behavior, number-to-sparkline threshold, tooltip content, including expired watch data and an actual Textual dark/light theme switch. `tests/test_visual_smoke.py` mounts a real row and caller tree in a headless Textual session. GitHub CI green at `503adc544691` with these tests (prior to the README update); verify later commits too. The implementation has not yet been exercised on the user's Arch/QEMU system.
+
+**Next Arch smoke test:** Pull feature branch, verify Ctrl+P changes source/call/watches/footer/console colors; step into `foo` and `bar` to see `foo(2)`-style argument signatures; press `o` from `foo()`/ `bar()` and observe the return marker under the caller frame; step three times in a function and hover the watch-history cell; click the row and press `H`, then inspect pasted TSV. Also retest `main.c::total` global, local watches, source scrolling and clipboard behavior.
+
+**Known bounds:** GDB must have meaningful debug arguments; optimized-out parameters show `?` or GDB unavailable values. Returns are only shown when GDB reports `function-finished`, not for arbitrary called functions. Clipboard depends on the terminal OSC52 integration. 4096 observations per symbol is a host UI cap, not an embedded RAM budget; earlier values are evicted.
 
 ## Resuming on the user's Arch Linux workstation
 
