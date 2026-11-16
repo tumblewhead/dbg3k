@@ -85,9 +85,11 @@ class ViewTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             self.assertIn('globals', app.visible_views)
             self.assertIn('✓ View: Globals', str(commands.get_option_at_index(selected).prompt))
-            await pilot.press('ctrl+a', *'theme')
-            await pilot.pause()
             search = palette.query_one(CommandInput)
+            search.value = 'theme'
+            search.action_end()
+            await pilot.pause()
+            self.assertIsNone(palette._highlighted_view())
             cursor = search.cursor_position
             await pilot.press('left')
             self.assertEqual(search.cursor_position, cursor - 1)

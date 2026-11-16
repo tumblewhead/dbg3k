@@ -41,7 +41,10 @@ identity survives caller exit and subsequent returns; JSONL has real probe
 provenance. Dedicated CI job added for the real GDB/QEMU test. Compileall and
 diff whitespace checks pass. See handoff/returns-validation.json for reproduction
 and earlier sandbox socket failure. Current Kodama/terminal behavior remains for
-user retest. Updates stay on feature/selectable-debugger-views and PR #2.
+user retest. Updates stay on feature/selectable-debugger-views. PR #2 was already
+merged by the owner; follow-up changes need a new review PR. An added non-view
+arrow test initially used Ctrl+A as select-all (Textual uses it as Home); corrected
+the setup to an exact Theme query, and verified normal Left search editing.
 
 ### 2026-11-15: selectable panes and immediate scope watches
 
