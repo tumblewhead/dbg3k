@@ -39,15 +39,20 @@ Illustrative return record (not actual simulation data):
 
 ## Live return UI
 
-A GDB/MI **function-finished** stop contains a return value if GDB can observe one; this commonly follows **o** (finish) from inside the callee. dbg3k groups these observations by (thread, caller function, callee function) and keeps exactly one active row per edge under the caller.
+A GDB/MI **function-finished** stop contains a return value if GDB can observe one; this commonly follows **o** (finish) from inside the callee. dbg3k groups these observations by (thread, caller function, callee function) and keeps exactly one **persistent** row per edge under the caller's historical group.
 
 ~~~text
-foo(2) [main.c:17]
-  result = 12
-  ↳ bar(4) ⟵ 12 · 5×
+cpu0 / observed call stack
+  ↩ observed returns (1)
+    foo() [thread 1]
+      ↳ bar(4) ⟵ 12 · 5×
+  ▶ active call stack
+    main()
+      foo(2)
+  ◆ globals (1)
 ~~~
 
-The row is persistent while the caller is visible, and its value is overwritten on subsequent returns. Hover for the **last ten** observed returns, with debugger-stop numbers and original callee signatures. Select/click to copy the **entire current-session history** for that caller/callee edge, read from the JSONL file as TSV rather than the 10-event in-memory cache.
+The return-history group is independent of the active stack. Its rows and tree-node identities **survive the caller leaving the stack** and subsequent asynchronous GDB replies. The displayed value is overwritten on subsequent returns, without recreating the node. Hover for the **last ten** observed returns, with debugger-stop numbers and original callee signatures. Select/click to copy the **entire current-session history** for that caller/callee edge, read from the JSONL file as TSV rather than the 10-event in-memory cache.
 
 Ordinary source **next/step over** does not report each callee's return value. To record a return now, step into the callee (**s**) and finish it (**o**). Unobserved calls require separate trace instrumentation; do not invent values.
 
