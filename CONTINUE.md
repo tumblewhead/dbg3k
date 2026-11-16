@@ -1,13 +1,49 @@
 # dbg3k: development history and continuation
 
 **Repository:** https://github.com/tumblewhead/dbg3k
-**Working branch:** `feature/stack-instruction-energy` (based on PR #4's branch)
-**Review:** https://github.com/tumblewhead/dbg3k/pull/5 (draft, stacked on open PR #4)
-**Current stage:** Three resource panes, actual QEMU dispatch collector, sampled GDB stack estimates and explicit energy model; 48 local tests and source CI pass, including real QEMU/GDB.
+**Working branch:** `feature/graphical-resource-views` (based on PR #5's branch)
+**Review:** New graphical follow-up PR pending; preceding resource work in PR #5.
+**Current stage:** Graphical stack map/raw bytes, sortable whole-run instruction/call-proxy Pareto and energy ranking; 53 local tests pass including actual QEMU/GDB.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
+
+### 2026-11-16: graphical resource projections
+
+Added three palette-selectable graphical panes while retaining all textual
+resource views. Stack map draws normal unwound-SP gaps vertically with exact
+address labels, approximate byte-scaled heights, selected frame marker and
+unknown boundaries. GDB now reads at most 256 raw bytes from the sampled normal
+stack slice while halted; graphical hex contents are observed bytes, not guesses
+about local-variable ownership. No free stack extent/oldest allocation/coroutine
+storage is invented. Stale/unsupported memory stays unavailable.
+
+Whole-run instruction and energy panes provide ranked bars (top eight plus
+current function), scrollable full DataTables, selectors and clickable headings,
+ascending/descending order and stable cursor selection across updates. Include
+dispatch count, entry-hit Calls† proxy, ELF bytes, instructions per entry/byte,
+all-code share/cumulative share and current function rank. Entry counters derive
+from existing per-PC histograms at normalized ELF body starts, with aliases folded
+and reset by QEMU UUID; no plugin binary/schema change. Tail entries, entry loops,
+reset/faults and mid-body jumps prevent labeling these exact invocation counts.
+Energy ranking uses existing user assumptions, includes attributed/unattributed
+estimated run energy, and states that a common factor preserves instruction
+ordering. Average power remains unavailable without target duration.
+
+Validation: all 53 tests pass with actual QEMU/plugin/GDB enabled. Real fixture
+has two observed entries and 26 dispatches for the counted loop. New GDB raw
+memory snapshot matches an independent MI memory read exactly. Headless tests
+exercise header clicks, sort selector, reverse order, current rank, cursor
+retention, cumulative 95% with 5% unknown, energy unavailable states, address
+ordering, bytes and stale-sample rejection. Preview PNGs/SVGs were generated and
+visually inspected in /tmp/dbg3k-graph-previews using explicitly marked synthetic
+fixtures; they are not target evidence. Compileall and whitespace checks pass.
+No local test failures. See compact handoff/graphical-validation.json.
+
+Next: open stacked graphical PR, check CI, restart dbg3k on the graphical branch,
+enable the graphical views in Ctrl+P, review narrow-terminal ergonomics and test
+the latest Kodama firmware independently.
 
 ### 2026-11-16: stack, code/instruction and energy panes
 

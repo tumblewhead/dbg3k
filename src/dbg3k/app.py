@@ -29,6 +29,8 @@ from .watch_ui import WatchRow
 from .views import VIEWS, ViewsScreen, ViewCommandPalette, EnergyScreen
 from .resources import CodeCatalog, StackProfile, InstructionProfile, EnergyModel, decode_stack
 from .resource_ui import resource_text
+from .graph_ui import StackMap, RunRanking
+from .graph_model import current_bodies
 
 class DebuggerApp(App):
     TITLE = 'dbg3k'
@@ -63,6 +65,9 @@ class DebuggerApp(App):
         background: $surface; padding: 0 1; }
     .resource-title { height: 1; text-style: bold; color: $text-primary; }
     .resource-content { height: auto; }
+    .graph-panel { height: 1fr; min-height: 20; border: round $border;
+        background: $surface; padding: 0 1; }
+    StackMap { height: auto; }
     WatchRow {
         height: 1; width: 100%; background: $surface;
         color: $foreground;
@@ -191,6 +196,15 @@ class DebuggerApp(App):
                         yield Static(title, classes='resource-title')
                         yield Static('Waiting for resource observations…', id=f'{key}_content',
                                      classes='resource-content', markup=False)
+                with VerticalScroll(id='stack_graph_panel', classes='graph-panel'):
+                    yield Static('STACK MAP & RAW CONTENTS', classes='resource-title')
+                    yield StackMap(id='stack_graph_content')
+                with VerticalScroll(id='run_graph_panel', classes='graph-panel'):
+                    yield Static('RUN STATISTICS & PARETO RANKING', classes='resource-title')
+                    yield RunRanking(id='run_graph_content')
+                with VerticalScroll(id='energy_graph_panel', classes='graph-panel'):
+                    yield Static('ENERGY RANKING · ESTIMATE', classes='resource-title')
+                    yield RunRanking(energy=True, id='energy_graph_content')
         yield Static('s:into  n:next  i:instruction  Space:repeat  Ctrl+P:views', id='stepbar')
         with Vertical(id='console_panel'):
             yield RichLog(id='console', highlight=True, markup=False)
@@ -227,7 +241,7 @@ class DebuggerApp(App):
         for key, (_, selector) in VIEWS.items():
             base.query_one(selector).display = key in self.visible_views
         source = 'source' in self.visible_views
-        right = bool(self.visible_views & {'tree', 'immediate', 'globals', 'stack', 'instructions', 'energy'})
+        right = bool(self.visible_views - {'source', 'console'})
         base.query_one('#left').display = source
         base.query_one('#right').display = right
         base.query_one('#left').styles.width = '63%' if right else '100%'
@@ -339,6 +353,7 @@ class DebuggerApp(App):
             self._rendered_theme = self.theme
             self._show_source()
             self._show_watches()
+            self._show_resources()
         if time.monotonic() - self._resource_poll_time >= .25:
             self._resource_poll_time = time.monotonic()
             self._poll_instruction_profile()
@@ -358,6 +373,14 @@ class DebuggerApp(App):
             if key == 'stack' and self._stack_error:
                 text += '\nGDB stack snapshot unavailable: ' + self._stack_error
             self.query_one(f'#{key}_content', Static).update(text)
+        self.query_one('#stack_graph_content', StackMap).set_sample(
+            self.stack_profile.sample, self.selected_level, self.model.stop)
+        current, selected = current_bodies(self.stack_profile, self.catalog,
+                                           self.model.stop, self.selected_level)
+        for key in ('run', 'energy'):
+            self.query_one(f'#{key}_graph_content', RunRanking).set_data(
+                self.catalog, self.instruction_counts, self.energy_model, current, selected,
+                self._count_status, self.status == 'HALTED')
 
     def _poll_instruction_profile(self) -> None:
         if self.instruction_path is None:
@@ -376,6 +399,7 @@ class DebuggerApp(App):
                                    total=self.instruction_counts.total, unknown=self.instruction_counts.unknown,
                                    complete=self.instruction_counts.complete,
                                    functions=dict(self.instruction_counts.by_function),
+                                   entry_hits=dict(self.instruction_counts.entry_hits),
                                    origin='qemu-plugin-instruction-dispatch')
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
             self._count_status = f'Instruction profile unavailable: {exc}'
@@ -399,6 +423,7 @@ class DebuggerApp(App):
                     self._trace_record('stack_sample', stop=stack['stop'], thread=stack['thread'],
                                        registers=stack['registers'], frames=stack['frames'],
                                        truncated=stack.get('truncated', False),
+                                       memory=stack.get('memory'), memory_error=stack.get('memory_error'),
                                        origin='gdb-unwound-registers')
                     self._show_resources()
                 return
@@ -416,6 +441,7 @@ class DebuggerApp(App):
         if record.kind == '*' and record.cls == 'running':
             self.status = 'RUNNING'
             self._show_status()
+            self._show_resources()
             return
         if record.kind == '*' and record.cls == 'stopped':
             old_top = self.model.frames[0] if self.model.frames else None

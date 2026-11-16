@@ -78,6 +78,8 @@ never_called:
             self.assertEqual(counted.size, 10)
             self.assertEqual(unused.size, 4)
             self.assertEqual(profile.by_function[counted.key], 26)  # two calls * (push+mov+5*(subs+bne)+pop)
+            self.assertEqual(profile.entry_hits[counted.key], 2)
+            self.assertEqual(profile.entry_hits.get(unused.key, 0), 0)
             self.assertEqual(profile.by_function.get(unused.key, 0), 0)
             self.assertEqual(profile.total, sum(profile.by_function.values()) + profile.unknown)
             pcs = dict(data['pcs'])

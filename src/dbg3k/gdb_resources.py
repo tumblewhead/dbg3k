@@ -31,6 +31,20 @@ def dbg3k_stack_snapshot(stop):
             frame = frame.older()
         except gdb.error:
             break
+    memory, memory_error = None, None
+    base = registers.get('sp')
+    if (base is not None and frames and all(f['kind'] == 'normal' and f['sp'] is not None for f in frames)):
+        # Only the sampled contiguous normal stack slice; never invent a stack
+        # origin or read beyond its highest unwound SP. Bound target reads.
+        top = max(f['sp'] for f in frames)
+        length = min(256, max(0, top - base))
+        if length:
+            try:
+                raw = gdb.selected_inferior().read_memory(base, length)
+                memory = dict(start=base, hex=bytes(raw).hex())
+            except gdb.error as exc:
+                memory_error = str(exc)
     gdb.write('__dbg3k_stack_v1__' + json.dumps(dict(
         schema='dbg3k.stack.v1', stop=stop, thread=str(thread.global_num),
-        registers=registers, frames=frames, truncated=frame is not None), separators=(',', ':')) + '\n')
+        registers=registers, frames=frames, truncated=frame is not None,
+        memory=memory, memory_error=memory_error), separators=(',', ':')) + '\n')

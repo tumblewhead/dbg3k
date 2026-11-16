@@ -19,6 +19,9 @@ VIEWS = {
     'stack': ('Stack frames and stack watch', '#stack_panel'),
     'instructions': ('Code and instruction counts', '#instruction_panel'),
     'energy': ('Energy estimate', '#energy_panel'),
+    'stack_graph': ('Graphical stack map and contents', '#stack_graph_panel'),
+    'run_graph': ('Run statistics and Pareto ranking', '#run_graph_panel'),
+    'energy_graph': ('Graphical energy ranking', '#energy_graph_panel'),
 }
 
 
@@ -78,7 +81,7 @@ class ViewsScreen(ModalScreen):
     ViewsScreen { align: center middle; }
     #view_choices { width: 62; height: auto; padding: 1 2;
         border: round $accent; background: $surface; }
-    #view_choices SelectionList { height: 10; }
+    #view_choices SelectionList { height: 13; }
     #view_choices Button { margin-top: 1; }
     """
     BINDINGS = [('escape', 'dismiss', 'Done'),

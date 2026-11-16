@@ -65,6 +65,22 @@ class QemuReturnTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(frames[0]['function'], 'bar')
                     self.assertIsNotNone(app.stack_profile.own_bytes(frames, 0))
                     self.assertGreaterEqual(app.stack_profile.own_bytes(frames, 0), 0)
+                    memory = app.stack_profile.sample['memory']
+                    self.assertIsNotNone(memory)
+                    self.assertLessEqual(len(bytes.fromhex(memory['hex'])), 256)
+                    # Independent MI read verifies the actual graphical-stack
+                    # bytes captured by the GDB Python snapshot helper.
+                    observed = []
+                    original_handle = app._handle
+                    def capture_memory(record):
+                        if record.kind == '^' and app.pending.get(record.token, (None,))[0] == 'memory_oracle':
+                            observed.append(record.payload)
+                        original_handle(record)
+                    app._handle = capture_memory
+                    app._send(f'-data-read-memory-bytes 0x{memory["start"]:x} {len(bytes.fromhex(memory["hex"]))}', 'memory_oracle')
+                    await ready()
+                    app._handle = original_handle
+                    self.assertEqual(observed[0]['memory'][0]['contents'], memory['hex'])
                     # No finish command: ordinary stepping must capture bar(2)=6.
                     for _ in range(12):
                         app.action_step()

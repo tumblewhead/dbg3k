@@ -3,6 +3,49 @@
 Three independently selectable panes follow the active stack frame selected in
 the existing tree. Ctrl+P → View entries → Left/Right, or use the Views dialog.
 
+Three additional graphical panes reuse the same evidence. The original textual
+panes remain available:
+
+| Graphical pane | Display and controls |
+| --- | --- |
+| Graphical stack map and contents | Vertical colored frame-gap bar, exact sampled address boundaries, selected-frame marker, SP/MSP/PSP values, and up to 256 actual raw stack bytes |
+| Run statistics and Pareto ranking | All emitted functions, total/exclusive dispatch counts, current-function count/rank, entry-hit call proxy, code bytes, instructions per entry/byte, share and cumulative share |
+| Graphical energy ranking | Ranked exclusive estimated charge/energy for all emitted bodies, estimated run total and unattributed energy under the same user model |
+
+Choose the sort metric in each ranking pane, click a table heading, or use the
+ascending/descending button. The bars show the top eight rows and the current
+function even if it ranks lower; the table contains all bodies and can scroll in
+both directions. Cursor selection is retained across live count updates.
+`▶` marks the currently stopped function (`Last stopped` while running); `▸`
+marks another frame selected in the stack tree. Ties use stable name/address
+order. Cumulative percentages always divide by **all** recorded dispatches,
+including unknown PCs; consequently attributed functions may sum to less than
+100%. Default descending instruction/energy order is Pareto-style; other sort
+orders are ranked bars with cumulative instruction shares.
+
+**Calls† means function-entry dispatch hits**, taken directly from the existing
+PC histogram at each sized ELF body's normalized start address. It is a call-count
+proxy, not an exact invocation trace: tail entries, resets, loops back to entry,
+faulting entry instructions, and jumps into the middle of a body affect the
+interpretation. Aliases share one entry counter. `Instr/entry` stays unavailable
+if no entry was observed; it is never inferred by dividing by zero. Entry counts
+reset with the QEMU run UUID. No plugin rebuild/schema change is needed for this
+derived metric, so existing compatible profile files can be ranked.
+
+The stack bar covers only adjacent normal-frame unwound-SP gaps, ordered from
+higher to lower addresses. Heights scale to estimated bytes with a minimum one
+row per gap; exact boundaries and sizes are labeled. Unknown/discontinuous or
+overlapping ranges are not silently joined. It does not draw invented free space,
+the oldest frame's unknown allocation, or coroutine storage. The raw hex dump
+shows bytes actually read by GDB at the same halted stop, from SP toward the
+highest sampled SP, bounded to 256 bytes. Bytes are not labeled as specific local
+variables without corresponding location evidence. Unsupported reads show
+unavailable, and samples from earlier stops are not displayed as current.
+
+Energy bars represent **estimated energy, not measured power**. With one common
+charge-per-instruction model for all functions, energy ordering is necessarily
+the same as instruction ordering. Peripheral/idle contributions remain excluded.
+
 | Pane | Evidence and scope |
 | --- | --- |
 | Stack frames and stack watch | GDB-visible frame count, active instances of the selected emitted function, available SP/MSP/PSP registers, unwound-SP frame contribution and inclusive estimates, sampled peaks |
@@ -52,6 +95,8 @@ Instruction collection requires restarting QEMU with the plugin enabled.
 
 The Stack pane works without the plugin, with Python-enabled GDB. Missing
 registers, symbols or plugin data display **unavailable**, rather than zero.
+The graphical stack pane also works without the plugin; rankings need matching
+QEMU count data and energy rankings additionally need configured assumptions.
 
 ## Stack interpretation
 
