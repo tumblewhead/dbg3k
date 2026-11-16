@@ -349,6 +349,27 @@ class DebuggerApp(App):
             f'j/k:cursor  b:break  r:until  c:run  y:copy  W:watches  H:history  L:log  ::GDB  · Stop #{self.model.stop}'
         )
 
+    @staticmethod
+    def _contrast_ink(background: str, *, dark: bool) -> str:
+        """Return legible Rich foreground color for a theme highlight.
+
+        Textual themes may leave background/surface unset. Never interpolate
+        such optional theme fields into Rich style strings.
+        """
+        if background.startswith('#') and len(background) in (4, 7):
+            try:
+                digits = background[1:]
+                if len(digits) == 3:
+                    digits = ''.join(c * 2 for c in digits)
+                rgb = [int(digits[index:index + 2], 16) / 255 for index in (0, 2, 4)]
+                linear = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+                          for c in rgb]
+                luminance = sum(c * w for c, w in zip(linear, (0.2126, 0.7152, 0.0722)))
+                return 'black' if luminance > 0.179 else 'white'
+            except ValueError:
+                pass
+        return 'white' if dark else 'black'
+
     def _show_source(self, *, reveal: bool = False, follow_pc: bool = False) -> None:
         """Display every source line, scrolling without executing the firmware."""
         if not self.model.frames:
@@ -390,8 +411,14 @@ class DebuggerApp(App):
             has_bp = (self.nav_file, i) in self.breaks
             mark = '▶' if execution else ('▸' if selected else ' ')
             bpmark = '●' if has_bp else ' '
-            style = (f'bold {theme.background} on {theme.success}' if execution else
-                     f'bold {theme.accent}' if selected else theme.foreground)
+            # Theme.background may be None (including textual-dark). A None
+            # interpolated into a Rich style causes MissingStyle on startup.
+            # Use the actual execution highlight color to select readable ink.
+            highlight = theme.success or '#4EBF71'
+            style = (f'bold {self._contrast_ink(highlight, dark=theme.dark)} on {highlight}'
+                     if execution else
+                     f'bold {theme.accent or theme.primary or "#7dd3fc"}' if selected
+                     else (theme.foreground or 'white'))
             text.append(f'{mark}{bpmark}{i:4} │ {source}\n', style=style)
         self.query_one('#source', Static).update(text)
         if reveal or changed_file:
