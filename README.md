@@ -50,3 +50,7 @@ python -m compileall -q src tests
 - `handoff/CONTINUE.json`: machine-readable next checkpoint
 
 **No fabricated measurements.** Instruction counts are not cycles, debugger-stop histories are not time series, and stack estimates are not guarantees.
+
+## Development journal and continuation
+
+Read [`CONTINUE.md`](CONTINUE.md) for project history, live user feedback, open defects, and exact next steps. [`handoff/CONTINUE.json`](handoff/CONTINUE.json) carries the machine-readable checkpoint.
