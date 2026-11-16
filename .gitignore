@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+examples/an505/firmware.elf
+examples/an505/firmware.map
+core
+*.core
