@@ -23,13 +23,14 @@ def child(node, name):
 @unittest.skipUnless(os.environ.get('DBG3K_QEMU_TEST') == '1', 'opt-in real GDB/QEMU test')
 class QemuObservationTests(unittest.IsolatedAsyncioTestCase):
     @asynccontextmanager
-    async def debugger(self, elf, folder, expressions):
+    async def debugger(self, elf, folder, expressions, *, sram=False):
         with socket.socket() as listener:
             listener.bind(('127.0.0.1', 0))
             port = listener.getsockname()[1]
+        image = ['-device', f'loader,file={elf},cpu-num=0'] if sram else ['-kernel', str(elf)]
         qemu = subprocess.Popen(['qemu-system-arm', '-M', 'mps2-an505', '-display', 'none',
             '-serial', 'none', '-monitor', 'none', '-semihosting-config', 'enable=on,target=native',
-            '-device', f'loader,file={elf},cpu-num=0', '-S', '-gdb', f'tcp:127.0.0.1:{port}'],
+            *image, '-S', '-gdb', f'tcp:127.0.0.1:{port}'],
             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         try:
             await asyncio.sleep(.2)
@@ -127,7 +128,7 @@ int main(void) { checkpoint(); state.negative = -9; checkpoint(); for(;;){} }
         expressions = ["'kodama.c'::tasks", "'kodama.c'::running", "'kodama.c'::levels",
                        "'kodama.c'::clock_ticks", 'g_cmd', 'not_a_kodama_symbol']
         with TemporaryDirectory() as folder:
-            async with self.debugger(elf, folder, expressions) as (app, ready):
+            async with self.debugger(elf, folder, expressions, sram=True) as (app, ready):
                 app._send('-break-insert kodama_signal', 'test_break')
                 app._send('-break-insert kodama_signal_and_pend', 'test_break')
                 await ready()

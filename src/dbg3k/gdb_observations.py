@@ -1,16 +1,15 @@
 """Loaded inside GDB in an isolated namespace. Never executes target code."""
-import importlib.util
 import json
-from pathlib import Path
+import os
 import time
 
 import gdb
 
-_spec = importlib.util.spec_from_file_location(
-    '_dbg3k_observation_contract', Path(__file__).with_name('observations.py'))
-_contract = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_contract)
-LIMITS = _contract.LIMITS
+_contract_path = os.path.join(os.path.dirname(__file__), 'observations.py')
+_contract = {'__name__': '_dbg3k_observation_contract'}
+with open(_contract_path) as _stream:
+    exec(compile(_stream.read(), _contract_path, 'exec'), _contract)
+LIMITS = _contract['LIMITS']
 
 
 def _error(path, code, message):
@@ -26,7 +25,7 @@ def _dereference(value):
 
 
 def _evaluate(expression):
-    root, selectors, dereference = _contract.expression_parts(expression)
+    root, selectors, dereference = _contract['expression_parts'](expression)
     value = gdb.parse_and_eval(root)
     for operator, key in selectors:
         if operator == '->':
@@ -159,7 +158,7 @@ def dbg3k_provenance():
         context = _context()
     except gdb.error:
         context = {}
-    gdb.write(_contract.PROVENANCE_PREFIX + json.dumps(dict(
+    gdb.write(_contract['PROVENANCE_PREFIX'] + json.dumps(dict(
         gdb_version=gdb.VERSION, **context), separators=(',', ':')) + '\n')
 
 
@@ -205,7 +204,7 @@ def dbg3k_observe(request, stop, expected_thread, expressions):
                     result['scope']['frame'] = dict(level=0)
                     result['errors'].append(_error('$', 'limit', 'record_bytes; raw/type/frame details omitted'))
                     encoded = json.dumps(result, ensure_ascii=True, separators=(',', ':'))
-            gdb.write(_contract.PREFIX + encoded + '\n')
+            gdb.write(_contract['PREFIX'] + encoded + '\n')
     finally:
         gdb.execute('set may-call-functions ' + ('on' if old_calls else 'off'), to_string=True)
         gdb.execute('set max-value-size ' + (str(old_max) if old_max else 'unlimited'), to_string=True)

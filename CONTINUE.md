@@ -36,7 +36,7 @@ g_cmd plus explicit invalid-expression errors. Independent MI queries agree on
 seen and task-array type. Generic ARM tests cover UINT64_MAX, nested fields,
 changing scalar, null vs stale pointers, guarded failures and truncated arrays.
 The 66-test full local suite passed with real GDB/QEMU/plugin enabled; an added
-missing-collector test passes too. Final full rerun passes all67 checks; compileall/whitespace pass. PR#8 open. Initial CI Python passed; QEMU job could not access Kodama with the default repository token. Cross-repository qualification is now conditional on KODAMA_READ_TOKEN; generic ARM checks always run. Corrected CI rerun pending.
+missing-collector test passes too. Final full rerun passes all67 checks; compileall/whitespace pass. PR#8 open. Initial CI Python passed; QEMU job could not access Kodama with the default repository token. Cross-repository qualification is now conditional on KODAMA_READ_TOKEN; generic ARM checks always run. Second CI exposed a missing math dependency in GDB helper imports and a generic flash fixture incorrectly using the SRAM loader. Collector imports were minimized; generic fixture now uses the proven -kernel boot path while Kodama retains its explicit-MSP SRAM loader. Focused local real-ARM rerun passes; new CI pending.
 
 Retained issues during work: sandbox denied localhost socket creation (approved
 rerun passed); first regression run exposed a synthetic catalog without build_id
