@@ -13,6 +13,7 @@ class GdbTransport:
         self.proc: subprocess.Popen[str] | None = None
         self._tokens = itertools.count(1)
         self._lock = threading.Lock()
+        self._reader: threading.Thread | None = None
 
     def start(self) -> None:
         self.proc = subprocess.Popen(
@@ -20,7 +21,8 @@ class GdbTransport:
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT, text=True, bufsize=1,
         )
-        threading.Thread(target=self._read, name='dbg3k-gdb-reader', daemon=True).start()
+        self._reader = threading.Thread(target=self._read, name='dbg3k-gdb-reader', daemon=True)
+        self._reader.start()
 
     def _read(self) -> None:
         assert self.proc is not None and self.proc.stdout is not None
@@ -48,3 +50,11 @@ class GdbTransport:
                 self.proc.wait(timeout=1)
             except subprocess.TimeoutExpired:
                 self.proc.kill()
+                self.proc.wait()
+        if self._reader is not None:
+            self._reader.join(timeout=1)
+        if self.proc is not None:
+            if self.proc.stdin is not None:
+                self.proc.stdin.close()
+            if self.proc.stdout is not None:
+                self.proc.stdout.close()

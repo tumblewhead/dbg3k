@@ -21,3 +21,21 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Compile Python
         run: python -m compileall -q src tests
+  qemu-returns:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install target debugger and emulator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gdb-multiarch qemu-system-arm gcc-arm-none-eabi
+          python -m pip install -e .
+      - name: Verify automatic returns through real GDB and QEMU
+        env:
+          DBG3K_QEMU_TEST: '1'
+          DBG3K_GDB: gdb-multiarch
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -p test_qemu_returns.py -v

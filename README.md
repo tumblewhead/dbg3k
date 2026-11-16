@@ -59,6 +59,9 @@ Press **Ctrl+P**, search **Views**, and press Enter. Click checkboxes or use
 Up/Down and Space to show or hide Source, Stack tree and observed returns,
 Immediate scope watch, Globals, and GDB console. Esc or Done closes the dialog.
 Individual **View:** commands in the palette also show a checkmark when enabled.
+Highlight a View command and press **Left or Right** to toggle it while keeping
+the palette, search text and selection open. Left/Right also toggle checkboxes
+in the Views dialog. For other palette commands the arrows edit the search text.
 Choices apply for the current session; all views start enabled on launch.
 
 The **immediate scope watch** shows only the executing frame (frame 0), including
@@ -112,12 +115,14 @@ Rich text markup uses the active theme as well. Open Textual's palette
 
 **Call tree:** GDB/MI `-stack-list-arguments` supplies argument values
 for active frames. For example, the scope tree can display `foo(2)`
-rather than `foo()` when symbols are available. A GDB
-`function-finished` stop (typically the `o` key / `finish`) adds
-an observed return under the caller, such as `↳ foo(2) ⟵ 4`.
-If GDB does not report the result, the UI says so. Ordinary stepping
-over a call does **not** reveal a return value automatically: those
-values require an observable GDB finish event, not inference.
+rather than `foo()` when symbols are available. With Python-enabled GDB,
+dbg3k arms an internal return probe for the debug-visible executing function at
+each stop. After stepping into `bar` with `s`, keep using `s`/`n`, or continue:
+when that invocation returns, GDB supplies its actual result to the tree without
+an extra visible stop. `o` / finish remains supported and is counted only once.
+Functions called entirely between debugger stops are not automatically observed.
+GDB builds without Python retain the `o` / finish fallback and log a diagnostic.
+Unavailable or void return values stay unreported; no register-based guesses.
 
 **Watch histories:** Each watch has its own line and hoverable history
 cell. The first two numeric samples appear as a short number list; once
@@ -133,8 +138,16 @@ GDB stops, not time-series data collected while firmware runs.
 
 **Verification:** Automated Python/model, GDB/MI parsing, Textual
 headless theme tests, and headless pane tests run in GitHub Actions.
-A real GDB/QEMU/Arch smoke test is still needed to confirm that
-argument values and finish notifications look right for AN505.
+A real GDB/QEMU AN505 regression now checks ordinary stepping, continuation,
+finish deduplication and retained return rows in the mounted Textual app:
+
+~~~sh
+DBG3K_QEMU_TEST=1 PYTHONPATH=src python -m unittest discover -s tests -p test_qemu_returns.py -v
+~~~
+
+Use `DBG3K_GDB=gdb-multiarch` if needed. This test also requires
+`arm-none-eabi-gcc` and `qemu-system-arm`. Actual terminal hover/clipboard behavior
+and the latest changes against Kodama remain to be reviewed by the user.
 
 ## Persistent caller-return histories and JSONL trace
 
@@ -150,7 +163,10 @@ foo(2)
 
 Subsequent observed returns from bar into foo replace the displayed value, increment the count, and remain available as history. Hover the return row for the last ten observed returns; **click/select the row to copy all of its current-session returns as TSV**, streaming from the JSONL file rather than the limited in-memory UI cache.
 
-To observe a return value, **step into bar with s and finish it with o**. GDB only emits the return-value notification at an observed function-finished event; ordinary next/step-over does not automatically capture callee return values. Missing return values are shown as unreported, never silently assigned zero.
+To observe a return value, **step into bar with s, then keep stepping normally**.
+The GDB Python return observer supplies the result when bar returns. `o` is an
+alternative. A `next` that skips an entire previously unseen call does not reveal
+that callee's result. Missing return values are shown as unreported, never zero.
 
 dbg3k also starts an **append-only JSONL trace** after connecting to GDB. Default path (relative to the directory where you launched dbg3k):
 

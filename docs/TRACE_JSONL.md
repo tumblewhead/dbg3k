@@ -1,6 +1,6 @@
 # dbg3k JSONL evidence stream (v1)
 
-**Goal:** retain debugger-observable execution, stack, variable, and function-return evidence so UI histories can be explored without losing older values. This is a *debugger-stop trace*, not an instruction-accurate QEMU trace or continuous sample stream.
+**Goal:** retain debugger-observable execution, stack, variable, and function-return evidence so UI histories can be explored without losing older values. This is a debugger observation stream (visible stops plus automatic return probes), not an instruction-accurate QEMU trace or continuous sample stream.
 
 ## File and lifecycle
 
@@ -27,7 +27,7 @@ Every object includes: **schema="dbg3k.trace.v1"**, **kind**, **session**, **seq
 | frame_arguments | stop, thread, arguments by stack level |
 | locals | stop, thread, frame_level, variables from GDB/MI |
 | global_value | stop, thread, symbol, label, value |
-| return | stop, thread, caller, callee, callee_display, value, caller_frame, origin |
+| return | stop, thread, caller, callee, callee_display, value, optional caller_frame, origin, optional stop_anchor |
 | gdb_error | stop, purpose, message |
 | session_end | target |
 
@@ -39,7 +39,16 @@ Illustrative return record (not actual simulation data):
 
 ## Live return UI
 
-A GDB/MI **function-finished** stop contains a return value if GDB can observe one; this commonly follows **o** (finish) from inside the callee. dbg3k groups these observations by (thread, caller function, callee function) and keeps exactly one **persistent** row per edge under the caller's historical group.
+A GDB Python internal finish breakpoint observes a return from a debug-visible
+function encountered at a stop, including when returning through ordinary `s`,
+`n` or continue. It emits a versioned JSON message on the MI console stream and
+automatically resumes without adding a visible debugger stop. Return records
+have `origin="gdb-python-finish-breakpoint"`, and `stop` anchors to the preceding
+visible stop (`stop_anchor="preceding-debugger-stop"`). MI `function-finished`
+events from `o` remain supported as `origin="gdb-mi-function-finished"`, with the
+new stop index. The two sources are deduplicated when they describe the same
+finish command. dbg3k groups observations by (thread, caller function, callee
+function) and keeps one persistent row per edge under the historical caller.
 
 ~~~text
 cpu0 / observed call stack
@@ -56,7 +65,13 @@ observed callee returns; those summaries use the same ledger and copy behavior.
 
 The return-history group is independent of the active stack. Its rows and tree-node identities **survive the caller leaving the stack** and subsequent asynchronous GDB replies. The displayed value is overwritten on subsequent returns, without recreating the node. Hover for the **last ten** observed returns, with debugger-stop numbers and original callee signatures. Select/click to copy the **entire current-session history** for that caller/callee edge, read from the JSONL file as TSV rather than the 10-event in-memory cache.
 
-Ordinary source **next/step over** does not report each callee's return value. To record a return now, step into the callee (**s**) and finish it (**o**). Unobserved calls require separate trace instrumentation; do not invent values.
+Step into a callee with **s**, then keep using **s/n** or continue to observe its
+return automatically. The observer tracks up to 128 pending normal frames with
+debug symbols and an identifiable caller. Unsupported/inline/optimized frames
+may be unavailable. Exception unwinds do not manufacture return values. Without
+GDB Python, use **o** as a fallback. A `next` over a wholly unseen call still
+does not observe that callee's result. These host debugger breakpoints change
+debug execution overhead; no timing or silicon measurements are implied.
 
 ## Provenance and bounds
 

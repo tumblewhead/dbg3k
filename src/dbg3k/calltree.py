@@ -4,8 +4,29 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
+import json
 
 from .model import Frame
+
+RETURN_PREFIX = '__dbg3k_return_v1__'
+
+
+def probe_return(message: str) -> dict[str, Any] | None:
+    """Decode our GDB helper's protocol, never parse human console prose."""
+    if not message.startswith(RETURN_PREFIX):
+        return None
+    try:
+        data = json.loads(message[len(RETURN_PREFIX):])
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(data, dict) or data.get('schema') != 'dbg3k.gdb-return.v1':
+        return None
+    if not all(isinstance(data.get(key), str) and data[key]
+               for key in ('thread', 'caller', 'callee', 'callee_display')):
+        return None
+    if 'value' not in data or (data['value'] is not None and not isinstance(data['value'], str)):
+        return None
+    return data
 
 
 def display_call(frame: Frame, *, max_args: int = 5) -> str:

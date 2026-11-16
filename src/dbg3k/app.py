@@ -19,11 +19,11 @@ from .globals import MAX_GLOBAL_WATCHES, GlobalSymbol, discover_globals
 from .backend import GdbTransport
 from .mi import Record
 from .model import Frame, ScopeModel, Watch, parse_stack_arguments
-from .calltree import ReturnKey, ReturnLedger, ReturnObservation, display_call, observed_return
+from .calltree import ReturnKey, ReturnLedger, ReturnObservation, display_call, observed_return, probe_return
 from .scope_ui import ScopeTree
 from .trace import TraceWriter
 from .watch_ui import WatchRow
-from .views import VIEWS, ViewsScreen
+from .views import VIEWS, ViewsScreen, ViewCommandPalette
 
 class DebuggerApp(App):
     TITLE = 'dbg3k'
@@ -107,6 +107,7 @@ class DebuggerApp(App):
         self._trace: TraceWriter | None = None
         self._trace_error_reported = False
         self._returns = ReturnLedger()
+        self._probe_returns_since_command: set[tuple[str, str, str]] = set()
         # Stable tree branches: only live frames are rebuilt at each GDB reply.
         # Return history nodes must survive frame exit and subsequent refreshes.
         self._stack_branch = None
@@ -174,8 +175,12 @@ class DebuggerApp(App):
             enabled = key in self.visible_views
             yield SystemCommand(
                 f'{"✓" if enabled else "☐"} View: {label}',
-                f'{"Hide" if enabled else "Show"} {label}',
+                'Left/Right: toggle view; palette stays open',
                 partial(self.action_toggle_view, key))
+
+    def action_command_palette(self) -> None:
+        if self.use_command_palette and not ViewCommandPalette.is_open(self):
+            self.push_screen(ViewCommandPalette(id='--command-palette'))
 
     def action_choose_views(self) -> None:
         self.push_screen(ViewsScreen(self.visible_views))
@@ -239,6 +244,21 @@ class DebuggerApp(App):
         series = self._returns.series.get(key)
         return series.tooltip if series is not None else ''
 
+    def _record_probe_return(self, data: dict) -> None:
+        # The probe may fire while continuing between visible stops. Anchor to
+        # the preceding stop and label that provenance explicitly in JSONL.
+        event = ReturnObservation(data['caller'], data['callee_display'],
+                                  data['value'], self.model.stop)
+        thread, callee = data['thread'], data['callee']
+        self._probe_returns_since_command.add((thread, event.caller_function, callee))
+        series = self._returns.observe(event, thread=thread, callee_function=callee)
+        self._trace_record('return', stop=self.model.stop, thread=thread,
+                           caller=series.key.caller, callee=callee,
+                           callee_display=event.callee_display, value=event.value,
+                           origin='gdb-python-finish-breakpoint',
+                           stop_anchor='preceding-debugger-stop')
+        self._show_scope()
+
     def _copy_return_history(self, key: ReturnKey) -> None:
         series = self._returns.series.get(key)
         if series is None:
@@ -290,6 +310,10 @@ class DebuggerApp(App):
     def _handle(self, record: Record) -> None:
         if record.kind in ('~', '@', '&'):
             message = str(record.payload).strip()
+            data = probe_return(message) if record.kind == '~' else None
+            if data is not None:
+                self._record_probe_return(data)
+                return
             if message:
                 self._log(message)
             return
@@ -313,14 +337,18 @@ class DebuggerApp(App):
             if self._last_return is not None:
                 thread_id = str(thread or self._active_thread or 'unknown')
                 callee_name = old_top.function if old_top is not None else None
-                series = self._returns.observe(self._last_return, thread=thread_id,
-                                               callee_function=callee_name)
-                self._trace_record(
-                    'return', stop=next_stop, thread=thread_id,
-                    caller=series.key.caller, callee=series.key.callee,
-                    callee_display=self._last_return.callee_display,
-                    value=self._last_return.value, caller_frame=payload.get('frame'),
-                    origin='gdb-mi-function-finished')
+                edge = (thread_id, self._last_return.caller_function, callee_name)
+                if edge not in self._probe_returns_since_command:
+                    series = self._returns.observe(self._last_return, thread=thread_id,
+                                                   callee_function=callee_name)
+                    self._trace_record(
+                        'return', stop=next_stop, thread=thread_id,
+                        caller=series.key.caller, callee=series.key.callee,
+                        callee_display=self._last_return.callee_display,
+                        value=self._last_return.value, caller_frame=payload.get('frame'),
+                        origin='gdb-mi-function-finished')
+            self._probe_returns_since_command.clear()
+            self._show_scope()
             if thread is not None and str(thread).isdecimal():
                 self._active_thread = str(thread)
             self.status = 'HALTED'
@@ -339,6 +367,8 @@ class DebuggerApp(App):
             self._log(f'{purpose}: {record.payload.get("msg", "GDB error")}')
             self._trace_record('gdb_error', stop=self.model.stop, purpose=purpose,
                                message=record.payload.get('msg', 'GDB error'))
+            if purpose == 'return_observer':
+                self._log('Automatic returns unavailable (GDB Python required); use o / finish to observe returns.')
             if purpose == 'vars':
                 self._watches_error = str(record.payload.get('msg', 'GDB rejected locals request'))
                 self._show_watches()
@@ -372,6 +402,11 @@ class DebuggerApp(App):
             self._send(f'-symbol-info-variables --max-results {MAX_GLOBAL_WATCHES + 1}',
                        'globals_discover')
             self._send('-thread-info', 'thread_info')
+            helper = str(Path(__file__).with_name('gdb_returns.py').resolve())
+            code = f'python exec(compile(open({helper!r}).read(), {helper!r}, "exec"))'
+            self._send(f'-interpreter-exec console "{self._quoted(code)}"', 'return_observer')
+        elif purpose == 'return_observer':
+            self._log('Automatic returns: tracking debug-visible functions encountered at stops.')
         elif purpose == 'thread_info':
             self._active_thread = select_thread_id(record.payload) or self._active_thread
             if self._active_thread is None:
@@ -676,6 +711,7 @@ class DebuggerApp(App):
     def _step(self, command: str) -> None:
         if self.status != 'HALTED':
             return
+        self._probe_returns_since_command.clear()
         self.last_step = command
         self.status = 'COMMANDING'
         self._show_status()
@@ -690,6 +726,7 @@ class DebuggerApp(App):
 
     def action_continue_run(self) -> None:
         if self.status == 'HALTED':
+            self._probe_returns_since_command.clear()
             self.status = 'COMMANDING'
             self._show_status()
             self._send('-exec-continue', 'execution')
@@ -732,6 +769,7 @@ class DebuggerApp(App):
 
     def action_run_to_cursor(self) -> None:
         if self.status == 'HALTED' and self.nav_file:
+            self._probe_returns_since_command.clear()
             self.status = 'COMMANDING'
             self._show_status()
             self._send(f'-exec-until "{self._quoted(self.nav_file)}:{self.nav_line}"',
@@ -803,6 +841,7 @@ class DebuggerApp(App):
             return
         command = event.value.strip()
         if command:
+            self._probe_returns_since_command.clear()
             self._log(f'(gdb) {command}')
             self._send(f'-interpreter-exec console "{self._quoted(command)}"', 'console')
             event.input.value = ''
