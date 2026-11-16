@@ -2,6 +2,7 @@
  * Single-vCPU guest instruction dispatch histogram. Translation never counts
  * as execution. Snapshots are atomic, cumulative, and identified by ELF SHA256.
  */
+#include <glib.h>
 #include <qemu-plugin.h>
 #include <glib/gstdio.h>
 #include <stdio.h>

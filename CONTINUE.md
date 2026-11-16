@@ -2,7 +2,7 @@
 
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/stack-instruction-energy` (based on PR #4's branch)
-**Review:** New resource PR pending; PR #4 remains open for preceding return/palette changes.
+**Review:** https://github.com/tumblewhead/dbg3k/pull/5 (draft, stacked on open PR #4)
 **Current stage:** Three resource panes, actual QEMU dispatch collector, sampled GDB stack estimates and explicit energy model; 48 local tests pass including real QEMU/GDB.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
@@ -264,6 +264,6 @@ Terminal 2: `dbg3k examples/an505/firmware.elf`
 
 **User confirmed:** frame-local watch query now succeeds. **Patched but unverified on user's machine:** globals and file-static watch discovery/evaluation; source scrolling and clipboard behavior.
 
-**Not implemented:** Global watch selection/pinning, function navigator, actual per-function instruction profiling, frame-stack peak calculation, energy accounting, numeric stepping prefixes, robust invocation identities.
+**Not implemented:** Global watch selection/pinning, function navigator, inclusive/invocation instruction attribution, proven stack bounds, measured energy/power, numeric stepping prefixes and robust invocation/task identities. First exclusive dispatch profiles, sampled SP estimates/peaks and explicit-assumption energy estimates now exist; see RESOURCES.md.
 
 **Do not regress:** Visible startup and handler source; separation of navigation and execution; accurate labels distinguishing measurement from estimate; GitHub + `CONTINUE.md` + JSON handoff continuity.

@@ -2,7 +2,7 @@
 
 ## Product
 
-A stylish, fast, keyboard-first source debugger for Cortex-M firmware in QEMU. Concept name qscope. CGDB-like navigation into startup, handlers and assembly. Source pane, scope tree, locals with change highlighting and sparklines, compact stepping bar, GDB console (later). Nerd Font optional; Unicode fallback. Execution `▶` and browsing `▸` cursors separate. Stop-state updates only while halted.
+A stylish, fast, keyboard-first source debugger for Cortex-M firmware in QEMU. Concept name qscope. CGDB-like navigation into startup, handlers and assembly. Source pane, scope tree, locals with change highlighting and sparklines, compact stepping bar and GDB console. Nerd Font optional; Unicode fallback. Execution `▶` and browsing `▸` cursors separate. Stack/variable stop-state updates only while halted; independent QEMU count snapshots can update while running.
 
 ## Canonical scope graph
 
