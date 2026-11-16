@@ -3,13 +3,19 @@
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/structured-observations` (based on PR #7's branch)
 **Review:** https://github.com/tumblewhead/dbg3k/pull/8 (draft, stacked on PR #7)
-**Current stage:** Selected typed observations extend dbg3k.trace.v1; real pinned Kodama ARM/QEMU qualification passes; 68 local checks pass; both CI jobs passed checkpoint fe1c5c4; final fast-step ordering checkpoint awaits CI.
+**Current stage:** Selected typed observations extend dbg3k.trace.v1; all68 local checks and both source CI jobs pass. Real pinned Kodama ARM/QEMU qualified locally; owner review and current-layout/terminal retest pending.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
 
 ### 2026-11-16: structured stop observations for Kodama tooling
+
+Final source `e178475` passed both Python and actual ARM/QEMU CI jobs in run
+43945295595. Real Kodama CI is explicitly skipped without KODAMA_READ_TOKEN;
+its actual pinned ELF passed locally. All68 local tests, compileall and whitespace
+checks pass. Review PR#8; pull feature/structured-observations and use Ctrl+P >
+Observation capture or repeated --observe flags. Schema/demo/receipt links below.
 
 Extended the existing dbg3k.trace.v1 journal rather than adding a parallel
 exporter. Opt-in --observe selectors and Ctrl+P > Observation capture select
