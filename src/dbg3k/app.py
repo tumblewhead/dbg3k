@@ -16,7 +16,9 @@ from .globals import MAX_GLOBAL_WATCHES, GlobalSymbol, discover_globals
 from .backend import GdbTransport
 from .mi import Record
 from .model import Frame, ScopeModel, parse_stack_arguments
-from .calltree import ReturnObservation, display_call, observed_return
+from .calltree import ReturnKey, ReturnLedger, ReturnObservation, display_call, observed_return
+from .scope_ui import ScopeTree
+from .trace import TraceWriter
 from .watch_ui import WatchRow
 
 class DebuggerApp(App):
@@ -93,9 +95,14 @@ class DebuggerApp(App):
         Binding('q', 'quit', 'Quit'),
     ]
 
-    def __init__(self, elf: str, gdb: str, remote: str) -> None:
+    def __init__(self, elf: str, gdb: str, remote: str,
+                 history_dir: str = "dbg3k-history") -> None:
         super().__init__()
         self.elf, self.remote = elf, remote
+        self.history_dir = history_dir
+        self._trace: TraceWriter | None = None
+        self._trace_error_reported = False
+        self._returns = ReturnLedger()
         self.transport = GdbTransport(gdb)
         self.model = ScopeModel()
         self.pending: dict[int, tuple[str, int | None]] = {}
@@ -131,7 +138,7 @@ class DebuggerApp(App):
                     yield Static('Connecting to GDB...', id='source')
                 yield Static('s:into  n:next  i:instruction  Space:repeat  j/k:cursor  b:break', id='stepbar')
             with Vertical(id='right'):
-                yield Tree('cpu0 / observed call stack', id='scope')
+                yield ScopeTree('cpu0 / observed call stack', id='scope')
                 with Vertical(id='watch_panel'):
                     yield Static('WATCHES  ·  hover history / click to copy', id='watch_heading')
                     yield Static('Locals & globals appear when GDB stops.', id='watch_status')
@@ -143,6 +150,7 @@ class DebuggerApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
+        self.query_one('#scope', ScopeTree).return_tooltip = self._return_tooltip
         try:
             self.transport.start()
             self._send(f'-file-exec-and-symbols "{self._quoted(self.elf)}"', 'load')
@@ -152,6 +160,8 @@ class DebuggerApp(App):
             self.status = 'ERROR'
 
     def on_unmount(self) -> None:
+        if self._trace is not None:
+            self._trace.close()
         self.transport.close()
 
     @staticmethod
@@ -162,10 +172,54 @@ class DebuggerApp(App):
         self._log_lines.append(line.rstrip())
         self.query_one('#console', RichLog).write(line.rstrip())
 
+    def _trace_record(self, kind: str, **fields: object) -> None:
+        if self._trace is None:
+            return
+        try:
+            self._trace.record(kind, **fields)
+        except OSError as exc:
+            if not self._trace_error_reported:
+                self._trace_error_reported = True
+                self._log(f'JSONL trace write failed: {exc}')
+            try:
+                self._trace.close()
+            except OSError:
+                pass
+            self._trace = None
+
+    def _return_tooltip(self, key: ReturnKey) -> str:
+        series = self._returns.series.get(key)
+        return series.tooltip if series is not None else ''
+
+    def _copy_return_history(self, key: ReturnKey) -> None:
+        series = self._returns.series.get(key)
+        if series is None:
+            return
+        if self._trace is not None:
+            try:
+                self._copy(self._trace.returns_tsv(
+                    thread=key.thread, caller=key.caller, callee=key.callee),
+                    f'all {series.count} observed returns for {key.callee} → {key.caller}')
+                return
+            except OSError as exc:
+                self._log(f'Could not read JSONL return history: {exc}')
+        # Fallback if file creation was denied; explicitly partial beyond 10.
+        header = 'stop\tcaller\tcallee\targs\tvalue'
+        rows = [
+            f'{event.stop}\t{key.caller}\t{key.callee}\t{event.callee_display}\t'
+            f'{event.value if event.value is not None else ""}'
+            for event in series.recent
+        ]
+        self._copy(header + '\n' + '\n'.join(rows),
+                   f'last {len(rows)} in-memory returns (file unavailable)')
+
     def _send(self, command: str, purpose: str, level: int | None = None) -> int | None:
         try:
             token = self.transport.send(command)
             self.pending[token] = (purpose, level)
+            if purpose in ('execution', 'console', 'break_add', 'break_del'):
+                self._trace_record('command', stop=self.model.stop,
+                                   gdb_command=command, purpose=purpose)
             return token
         except (OSError, BrokenPipeError, AssertionError) as exc:
             self.status = 'ERROR'
@@ -201,10 +255,24 @@ class DebuggerApp(App):
             return
         if record.kind == '*' and record.cls == 'stopped':
             old_top = self.model.frames[0] if self.model.frames else None
-            self._last_return = observed_return(
-                record.payload if isinstance(record.payload, dict) else {},
-                old_top, self.model.stop + 1)
-            thread = record.payload.get('thread-id') if isinstance(record.payload, dict) else None
+            payload = record.payload if isinstance(record.payload, dict) else {}
+            next_stop = self.model.stop + 1
+            self._last_return = observed_return(payload, old_top, next_stop)
+            thread = payload.get('thread-id')
+            self._trace_record('stop', stop=next_stop, reason=payload.get('reason'),
+                               thread=thread, frame=payload.get('frame'),
+                               origin='gdb-mi-stopped')
+            if self._last_return is not None:
+                thread_id = str(thread or self._active_thread or 'unknown')
+                callee_name = old_top.function if old_top is not None else None
+                series = self._returns.observe(self._last_return, thread=thread_id,
+                                               callee_function=callee_name)
+                self._trace_record(
+                    'return', stop=next_stop, thread=thread_id,
+                    caller=series.key.caller, callee=series.key.callee,
+                    callee_display=self._last_return.callee_display,
+                    value=self._last_return.value, caller_frame=payload.get('frame'),
+                    origin='gdb-mi-function-finished')
             if thread is not None and str(thread).isdecimal():
                 self._active_thread = str(thread)
             self.status = 'HALTED'
@@ -221,6 +289,8 @@ class DebuggerApp(App):
         argument_result_stop = self._argument_result_stop.pop(record.token, None)
         if record.cls == 'error':
             self._log(f'{purpose}: {record.payload.get("msg", "GDB error")}')
+            self._trace_record('gdb_error', stop=self.model.stop, purpose=purpose,
+                               message=record.payload.get('msg', 'GDB error'))
             if purpose == 'vars':
                 self._watches_error = str(record.payload.get('msg', 'GDB rejected locals request'))
                 self._show_watches()
@@ -245,6 +315,12 @@ class DebuggerApp(App):
             self._connected = True
             self.status = 'HALTED'
             self._log(f'Connected to {self.remote}; ELF: {self.elf}')
+            if self._trace is None:
+                try:
+                    self._trace = TraceWriter(self.elf, self.remote, self.history_dir)
+                    self._log(f'JSONL recording: {self._trace.path}')
+                except OSError as exc:
+                    self._log(f'JSONL recording unavailable: {exc}')
             self._send(f'-symbol-info-variables --max-results {MAX_GLOBAL_WATCHES + 1}',
                        'globals_discover')
             self._send('-thread-info', 'thread_info')
@@ -257,6 +333,11 @@ class DebuggerApp(App):
             raw = record.payload.get('stack', [])
             frames = [Frame.from_mi(item['frame']) for item in raw if isinstance(item, dict) and 'frame' in item]
             self.model.set_frames(frames)
+            self._trace_record('frames', stop=self.model.stop,
+                               thread=self._active_thread, frames=[
+                                   dict(level=f.level, function=f.function,
+                                        filename=f.filename, line=f.line, pc=f.pc)
+                                   for f in frames])
             self._show_source(reveal=True, follow_pc=True)
             self._show_scope()
             self._watches_error = ''
@@ -285,13 +366,21 @@ class DebuggerApp(App):
         elif purpose == 'global_value' and level is not None:
             if global_result_stop == self.model.stop:
                 symbol = self._globals[level]
+                value = str(record.payload.get('value', '<unavailable>'))
                 self.model.set_global_value(
-                    symbol.key, symbol.label, symbol.name,
-                    str(record.payload.get('value', '<unavailable>')), symbol.type_name)
+                    symbol.key, symbol.label, symbol.name, value, symbol.type_name)
+                self._trace_record('global_value', stop=self.model.stop,
+                                   thread=self._active_thread,
+                                   symbol=symbol.key, label=symbol.label, value=value)
                 self._finish_global_display()
         elif purpose == 'args':
             if argument_result_stop == self.model.stop:
-                self.model.set_frame_arguments(parse_stack_arguments(record.payload))
+                args = parse_stack_arguments(record.payload)
+                self.model.set_frame_arguments(args)
+                self._trace_record('frame_arguments', stop=self.model.stop,
+                                   thread=self._active_thread, arguments={
+                                       str(level): list(values)
+                                       for level, values in args.items()})
                 self._show_scope()
         elif purpose == 'vars' and level is not None:
             variables = record.payload.get('variables', [])
@@ -302,6 +391,9 @@ class DebuggerApp(App):
                 return
             self._watch_results[level] = len(variables)
             self.model.set_variables(level, [v for v in variables if isinstance(v, dict)])
+            self._trace_record('locals', stop=self.model.stop,
+                               thread=self._active_thread, frame_level=level,
+                               variables=variables)
             self._show_scope()
             self._show_watches()
         elif purpose == 'break_add':
@@ -440,10 +532,12 @@ class DebuggerApp(App):
             )
             for watch in sorted(self.model.active_watches(frame.level), key=lambda w: w.name):
                 node.add_leaf(f'{watch.name} = {watch.value}' + (' ◆' if watch.changed else ''))
-            if (self._last_return is not None and
-                    self._last_return.stop == self.model.stop and
-                    self._last_return.caller_function == frame.function):
-                node.add_leaf(self._last_return.display)
+            for series in self._returns.for_caller(
+                    thread=self._active_thread or 'unknown', caller=frame.function):
+                # One durable node per caller/callee edge, replacing its value
+                # as more GDB function-finished observations arrive.
+                node.add_leaf(Text(series.label, style='bold'),
+                              data=series.key)
             node.expand()
             parent = node
         globals_now = sorted(self.model.active_globals(), key=lambda watch: watch.label)
@@ -551,6 +645,9 @@ class DebuggerApp(App):
                        'execution')
 
     def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
+        if isinstance(event.node.data, ReturnKey):
+            self._copy_return_history(event.node.data)
+            return
         if isinstance(event.node.data, int):
             self.selected_level = event.node.data
             self.nav_file = ''  # selecting source never executes firmware
