@@ -31,15 +31,25 @@ jobs:
       - name: Install target debugger and emulator
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gdb-multiarch qemu-system-arm gcc-arm-none-eabi libglib2.0-dev build-essential pkg-config
+          sudo apt-get install -y --no-install-recommends gdb-multiarch qemu-system-arm gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-dev libglib2.0-dev build-essential pkg-config
           # Ubuntu 24.04 ships QEMU 8.2. Use its matching public plugin API.
           curl --fail --location https://raw.githubusercontent.com/qemu/qemu/v8.2.2/include/qemu/qemu-plugin.h -o "$RUNNER_TEMP/qemu-plugin.h"
           make -C plugins QEMU_INCLUDE="$RUNNER_TEMP"
           python -m pip install -e .
+      - name: Check out pinned Kodama teaching example
+        uses: actions/checkout@v4
+        with:
+          repository: tumblewhead/kodama
+          ref: 2679a470eb982aee76e75950f0e117edf02767fd
+          path: .kodama-fixture
+      - name: Build the real Kodama ARM ELF
+        working-directory: .kodama-fixture
+        run: OUT="$RUNNER_TEMP/kodama-arm" sh examples/c-main/arm/build.sh
       - name: Verify actual QEMU dispatch counts, stack observations and returns
         env:
           DBG3K_QEMU_TEST: '1'
           DBG3K_GDB: gdb-multiarch
           DBG3K_QEMU_PLUGIN_TEST: '1'
           PYTHONPATH: src
+          DBG3K_KODAMA_ELF: ${{ runner.temp }}/kodama-arm/demo.elf
         run: python -m unittest discover -s tests -p 'test_qemu*.py' -v

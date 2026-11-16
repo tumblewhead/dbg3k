@@ -7,6 +7,12 @@ estimates, ELF function sizes, and optional QEMU instruction dispatch profiling.
 Local watches are user-confirmed; the resource collector has real AN505 emulator
 tests. Stack bounds, silicon cycles and measured power remain unavailable.
 
+**Structured observation capture:** use Ctrl+P → Observation capture to select
+expressions and start/stop typed snapshots in the existing JSONL trace. Or pass
+repeated `--observe "'kodama.c'::tasks"` flags. Scalars, fields, array elements,
+pointer addresses, read failures and capture limits retain stop/build provenance.
+See [the schema, queries and real Kodama/QEMU demonstration](docs/OBSERVATIONS.md).
+
 ## Getting started on Arch Linux
 
 Install Python 3.11+, make, arm-none-eabi-gcc, qemu-system-arm, GDB with ARM support.

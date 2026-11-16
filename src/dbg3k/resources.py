@@ -29,11 +29,16 @@ class FunctionCode:
 class CodeCatalog:
     def __init__(self, elf: str):
         self.sha256 = hashlib.sha256(Path(elf).read_bytes()).hexdigest()
+        self.build_id = None
         groups = {}
         with open(elf, 'rb') as stream:
             image = ELFFile(stream)
             self.machine = image['e_machine']
             for table in image.iter_sections():
+                if hasattr(table, 'iter_notes'):
+                    for note in table.iter_notes():
+                        if note['n_type'] == 'NT_GNU_BUILD_ID':
+                            self.build_id = note['n_desc']
                 if not isinstance(table, SymbolTableSection):
                     continue
                 for symbol in table.iter_symbols():
