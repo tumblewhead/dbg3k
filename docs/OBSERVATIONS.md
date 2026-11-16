@@ -194,8 +194,12 @@ The real Kodama test stops at `kodama_signal` and `kodama_signal_and_pend` and
 checks the worker active=1, generation=1, waiting=1, seen=0 then seen=1; it also
 captures `running`, `levels`, `clock_ticks`, `g_cmd`, and an invalid expression.
 The generic ARM fixture verifies UINT64_MAX, nested arrays, a changing scalar,
-null vs bad pointers, failed explicit reads, GNU build ID and truncation. CI runs
-both against the pinned real source. The example is an SRAM-only M23-instruction
+null vs bad pointers, failed explicit reads, GNU build ID and truncation.
+CI always runs the generic ARM checks. To also build and test the pinned real
+Kodama source, configure repository secret `KODAMA_READ_TOKEN` with read access
+to Kodama; dbg3k's default Actions token could not access that repository. Without
+it, the Kodama CI test is explicitly skipped; the local real-ELF qualification
+is independent. The example is an SRAM-only M23-instruction
 image at `0x38000000` running on QEMU's AN505 M33 proxy. No physical M23, physical
 timing/power or target UI qualification is implied. Local versions/results and
 retained failures are in `handoff/observations-validation.json`.

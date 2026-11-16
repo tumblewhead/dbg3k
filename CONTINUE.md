@@ -2,8 +2,8 @@
 
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/structured-observations` (based on PR #7's branch)
-**Review:** New observation PR pending; stacked on PR #7.
-**Current stage:** Selected typed observations extend dbg3k.trace.v1; real pinned Kodama ARM/QEMU qualification passes; 67 local checks pass; PR/CI pending.
+**Review:** https://github.com/tumblewhead/dbg3k/pull/8 (draft, stacked on PR #7)
+**Current stage:** Selected typed observations extend dbg3k.trace.v1; real pinned Kodama ARM/QEMU qualification passes; 67 local checks pass; Python CI passed; corrected optional cross-repository CI checkout awaits rerun.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
@@ -36,7 +36,7 @@ g_cmd plus explicit invalid-expression errors. Independent MI queries agree on
 seen and task-array type. Generic ARM tests cover UINT64_MAX, nested fields,
 changing scalar, null vs stale pointers, guarded failures and truncated arrays.
 The 66-test full local suite passed with real GDB/QEMU/plugin enabled; an added
-missing-collector test passes too. Final full rerun passes all67 checks; compileall/whitespace pass. PR/CI pending.
+missing-collector test passes too. Final full rerun passes all67 checks; compileall/whitespace pass. PR#8 open. Initial CI Python passed; QEMU job could not access Kodama with the default repository token. Cross-repository qualification is now conditional on KODAMA_READ_TOKEN; generic ARM checks always run. Corrected CI rerun pending.
 
 Retained issues during work: sandbox denied localhost socket creation (approved
 rerun passed); first regression run exposed a synthetic catalog without build_id

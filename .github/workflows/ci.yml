@@ -23,6 +23,8 @@ jobs:
         run: python -m compileall -q src tests
   qemu-profiling:
     runs-on: ubuntu-24.04
+    env:
+      KODAMA_READ_TOKEN: ${{ secrets.KODAMA_READ_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -37,19 +39,27 @@ jobs:
           make -C plugins QEMU_INCLUDE="$RUNNER_TEMP"
           python -m pip install -e .
       - name: Check out pinned Kodama teaching example
+        if: env.KODAMA_READ_TOKEN != ''
         uses: actions/checkout@v4
         with:
           repository: tumblewhead/kodama
           ref: 2679a470eb982aee76e75950f0e117edf02767fd
           path: .kodama-fixture
+          token: ${{ secrets.KODAMA_READ_TOKEN }}
+          persist-credentials: false
       - name: Build the real Kodama ARM ELF
+        if: env.KODAMA_READ_TOKEN != ''
         working-directory: .kodama-fixture
-        run: OUT="$RUNNER_TEMP/kodama-arm" sh examples/c-main/arm/build.sh
+        run: |
+          OUT="$RUNNER_TEMP/kodama-arm" sh examples/c-main/arm/build.sh
+          echo "DBG3K_KODAMA_ELF=$RUNNER_TEMP/kodama-arm/demo.elf" >> "$GITHUB_ENV"
+      - name: Report optional Kodama coverage
+        if: env.KODAMA_READ_TOKEN == ''
+        run: echo "Kodama CI capture skipped (KODAMA_READ_TOKEN unavailable). Generic ARM/QEMU observations remain mandatory; see the independently recorded local Kodama receipt."
       - name: Verify actual QEMU dispatch counts, stack observations and returns
         env:
           DBG3K_QEMU_TEST: '1'
           DBG3K_GDB: gdb-multiarch
           DBG3K_QEMU_PLUGIN_TEST: '1'
           PYTHONPATH: src
-          DBG3K_KODAMA_ELF: ${{ runner.temp }}/kodama-arm/demo.elf
         run: python -m unittest discover -s tests -p 'test_qemu*.py' -v
