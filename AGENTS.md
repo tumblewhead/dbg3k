@@ -1,8 +1,8 @@
 # Agent contract
 
-1. Read `handoff/CONTINUE.json`, `README.md`, and `docs/DESIGN.md` at start.
+1. Read `CONTINUE.md`, `handoff/CONTINUE.json`, `README.md`, and `docs/DESIGN.md` at start.
 2. `tumblewhead/dbg3k` GitHub repository is canonical. Work on a named branch, open a PR, keep main protected from unreviewed experiments.
-3. Update the handoff JSON at each significant milestone. Machine-to-machine notes must remain compact machine-readable JSON.
+3. Update `CONTINUE.md` and the handoff JSON at each significant milestone. Machine-to-machine notes must remain compact machine-readable JSON.
 4. Tests: `PYTHONPATH=src python -m unittest discover -s tests -v` and `python -m compileall -q src tests`; record failures.
 5. Do not pretend QEMU guest instruction counts are silicon cycles, or guessed stack sizes are verified. Annotate observed vs estimated vs unavailable.
 6. Preserve separation of MI transport, scope model, and Textual frontend.
