@@ -54,3 +54,13 @@ python -m compileall -q src tests
 ## Development journal and continuation
 
 Read [`CONTINUE.md`](CONTINUE.md) for project history, live user feedback, open defects, and exact next steps. [`handoff/CONTINUE.json`](handoff/CONTINUE.json) carries the machine-readable checkpoint.
+
+## Copying text and running GDB commands
+
+Textual supports mouse drag-selection with Ctrl+C on many widgets. On some terminals Shift+drag lets the terminal handle the selection directly.
+
+In the debugger's source/scope views, `y` copies the current source line (or a selected scope tree node), `Y` copies the current source file, `W` copies all visible watches as tab-separated rows, and `L` copies the last 500 console lines. Copy uses Textual's OSC 52 clipboard integration; terminal/remote clipboard support varies. If copy does not reach the desktop clipboard, use Shift+drag and the terminal's copy shortcut.
+
+Press `F2` (or `:`, where supported) to focus the GDB console-command input. Paste a GDB CLI command such as `info registers` and press Enter; Esc returns keyboard focus to debugger controls. This is an interactive CLI command line, not an automatic GDB/MI scripting mode.
+
+The watch backend first discovers a GDB thread via `-thread-info` or stop events, then issues frame-local requests with **both** `--thread ID` and `--frame N`. Locals are only available where GDB reports their scope.
