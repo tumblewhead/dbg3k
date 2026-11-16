@@ -52,7 +52,7 @@ class VisualSmokeTest(unittest.IsolatedAsyncioTestCase):
         """
         with TemporaryDirectory() as folder:
             src = Path(folder) / "startup.c"
-            src.write_text("\\n".join(f"int line_{i} = {i};" for i in range(1, 29)),
+            src.write_text("\n".join(f"int line_{i} = {i};" for i in range(1, 29)),
                            encoding="utf-8")
             app = DebuggerApp("demo.elf", "gdb", "localhost:1234")
             app.transport.start = lambda: None
