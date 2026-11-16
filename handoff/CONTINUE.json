@@ -5,7 +5,7 @@
   "canonical_branch": "main",
   "working_branch": "feature/m0-1-mi-textual-scope-001",
   "milestone": "M0.1",
-  "status": "GLOBALS_WATCHES_CI_PASSED_PENDING_ARCH_RETTEST",
+  "status": "THEME_CALLSIGNATURE_RETURNS_WATCH_HISTORY_CI_PASSED_ARCH_PENDING",
   "validated": [
     "User reports Textual TUI launches",
     "User reports clicking a scope-tree function shows source",
@@ -13,20 +13,25 @@
     "Python compileall in builder",
     "15 pure-Python MI/parser/model/thread-command tests pass in builder",
     "User confirmed frame-local watches populate correctly on Arch/QEMU after --thread fix",
-    "Global symbol parsing and model/history tests passed in GitHub Actions"
+    "Global symbol parsing and model/history tests passed in GitHub Actions",
+    "Full theme CSS and Rich dynamic styling headless Testual dark/light test passed",
+    "GDB/MI argument and return-value parser/model tests passed",
+    "Hoverable watch-row and annotated caller tree headless integration tests passed"
   ],
   "unvalidated": [
     "Live Textual VerticalScroll behavior on Arch",
     "QEMU AN505 example build/run in builder",
     "Textual OSC52 clipboard with user's terminal, keyboard focus, and CLI input",
-    "Real QEMU/GDB global and file-static value reads from AN505 ELF"
+    "Real QEMU/GDB global and file-static value reads from AN505 ELF",
+    "Live QEMU/GDB argument tuple results and function-finished return events",
+    "Actual terminal tooltip and clipboard behavior for 4096-sample TSV"
   ],
   "next": [
-    "User retest: pull feature branch; verify main.c::total appears in globals group at Reset_Handler and while stepping in main/foo/bar",
-    "Check global value-change glyph, stop history sparkline, copy W, and local watches regression",
-    "If missing, record -symbol-info-variables debug output and -data-evaluate-expression \"'main.c'::total\" on user's GDB",
-    "Develop selectable/pinned globals beyond first 64, full async integration tests, and dynamic expression watches",
-    "Repair hardcoded blue theme CSS and Rich palette; advance static .text, stack and instruction profiling"
+    "User pull feature branch, pip install -e ., run AN505 QEMU/dbg3k and switch Ctrl+P themes; verify source, call tree, watches, footer, console all change",
+    "At foo(2), verify argument-bearing call tree. Press o/finish and confirm ↳ foo(2) ⟵ 4 appears below caller frame; do not imply returns from normal next",
+    "Observe watch history as 1-2 raw values and sparkline from third numeric sample; hover last-10 values; click row and use H for full TSV export",
+    "Retest main.c::total global watch, local watches, startup/source browsing and copy workflows",
+    "After user smoke receipt: stabilize async GDB stop/frame/args/vars ordering, tackle theme or source UI edge cases, then static .text, stack and instruction profiler"
   ],
   "decisions": [
     "Scope tree canonical",
@@ -35,13 +40,17 @@
     "dynamic guest instruction share not CPU cycles",
     "stack frame, cumulative depth and inclusive peak distinct",
     "energy estimate explicit assumptions",
-    "single-key step and repeat"
+    "single-key step and repeat",
+    "Call tree shows debug-available argument values; return values only GDB function-finished events",
+    "Watch UI raw numeric until three observations then sparkline; tooltip last ten; copy TSV of bounded 4096-sample history"
   ],
   "limitations": [
     "no measured instruction/stack/energy profiles",
     "histories are sampled stops only",
     "cannot see calls entirely between halts",
-    "no pin UI; globals show first 64 discoverable debug symbols"
+    "no pin UI; globals show first 64 discoverable debug symbols",
+    "return markers are stop-scoped, no arbitrary-step over-call return-value inference",
+    "4096 observations retained per watch, oldest are evicted"
   ],
   "references": [
     "CONTINUE.md",
@@ -50,15 +59,18 @@
     "docs/DESIGN.md",
     "docs/CONVERSATION_NOTES.md"
   ],
-  "summary": "User confirmed locals work. Added GDB/MI global/file-static discovery and per-stop value retrieval to watch table/scope tree, same bounded histories, stale reply guard, unit tests; target retest pending.",
+  "summary": "User confirmed locals; subsequent request implemented whole-app theme tokens, live GDB argument-bearing call labels, stop-scoped GDB-observed function returns, 4096-stop watch history, 1-2 raw values then sparkline, per-cell last-ten tooltip, per-row and all-history TSV clipboard. Headless UI/model CI passes; Arch/QEMU end-to-end retest pending.",
   "known_issues": {
     "reported": [
       "Global and file-static variables not previously shown (new implementation awaiting Arch retest)",
-      "Hardcoded blue theme CSS does not respond consistently to theme change",
       "Advanced stack, .text, guest-instruction and modeled energy attribution not implemented",
-      "Source scrolling and clipboard patches still require complete user verification"
+      "Source scrolling and clipboard patches still require complete user verification",
+      "Full-app theme issue patched and headless-tested, pending user visual confirmation"
     ],
     "watch_root_cause": "Resolved for locals according to user: --thread and --frame provided",
-    "globals": "Implemented and CI-tested; static AN505 total should show as main.c::total, but no live target receipt yet"
+    "globals": "Implemented and CI-tested; static AN505 total should show as main.c::total, but no live target receipt yet",
+    "theme": "All app CSS now uses Textual theme variables; Rich source uses current_theme. Headless dark/light switch verified.",
+    "calltree": "GDB MI -stack-list-arguments displays current arguments; function-finished return-value shown in caller on that stop only.",
+    "watch_history": "Two numeric samples as list, three or more as 24-char sparkline, last-ten tooltip, 4096 host-side cap; click row or H copies TSV."
   }
 }
