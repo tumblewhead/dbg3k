@@ -2,7 +2,7 @@
 
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `fix/kodama-level-request-markers` (based on PR #9's branch)
-**Review:** Follow-up PR pending; graphical view baseline: https://github.com/tumblewhead/dbg3k/pull/9
+**Review:** https://github.com/tumblewhead/dbg3k/pull/10 (draft, stacked on PR #9)
 **Current stage:** Level requests retain the API triangle beside their direction arrow. Local suite: 80 tests, 73 pass/7 opt-in QEMU skips; compileall/whitespace pass. Baseline real-QEMU evidence below remains separate from this UI-only change.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
@@ -26,6 +26,9 @@ the fixture using the model's reset API. Full suite: 80 tests in 18.939s, 73 pas
 and 7 opt-in real-QEMU tests skipped. Compileall and whitespace pass. No collector
 changes; real QEMU and physical hardware were not rerun for this display fix.
 Existing user capture directories remain untouched and untracked.
+Review PR#10; source1a892a3 CI run43981210297 was queued at handoff. To try:
+`git fetch origin`, `git switch fix/kodama-level-request-markers`, then
+`git pull --ff-only` and restart the existing editable-venv application.
 
 ### 2026-11-16: graphical Kodama scheduler view
 
