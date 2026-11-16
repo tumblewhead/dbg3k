@@ -2,7 +2,7 @@
 
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/graphical-resource-views` (based on PR #5's branch)
-**Review:** New graphical follow-up PR pending; preceding resource work in PR #5.
+**Review:** https://github.com/tumblewhead/dbg3k/pull/6 (draft, stacked on PR #5)
 **Current stage:** Graphical stack map/raw bytes, sortable whole-run instruction/call-proxy Pareto and energy ranking; 53 local tests pass including actual QEMU/GDB.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
@@ -41,7 +41,8 @@ visually inspected in /tmp/dbg3k-graph-previews using explicitly marked syntheti
 fixtures; they are not target evidence. Compileall and whitespace checks pass.
 No local test failures. See compact handoff/graphical-validation.json.
 
-Next: open stacked graphical PR, check CI, restart dbg3k on the graphical branch,
+Review: PR #6 is open against feature/stack-instruction-energy. Next: check CI,
+restart dbg3k on the graphical branch,
 enable the graphical views in Ctrl+P, review narrow-terminal ergonomics and test
 the latest Kodama firmware independently.
 
