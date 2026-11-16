@@ -17,10 +17,10 @@ class WatchRow(Horizontal):
         self.watch = watch
 
     def compose(self) -> ComposeResult:
-        yield Static(classes="watch-name")
-        yield Static(classes="watch-value")
-        yield Static(classes="watch-delta")
-        yield Static(classes="watch-history")
+        yield Static(classes="watch-name", markup=False)
+        yield Static(classes="watch-value", markup=False)
+        yield Static(classes="watch-delta", markup=False)
+        yield Static(classes="watch-history", markup=False)
 
     def on_mount(self) -> None:
         self._update_cells()
