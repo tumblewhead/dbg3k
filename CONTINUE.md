@@ -2,14 +2,14 @@
 
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/kodama-visual-state` (based on PR #8's branch)
-**Review:** Kodama view PR pending, stacked on PR #8.
-**Current stage:** Graphical Kodama task/signal timelines, policy boxes, pool ownership and offline replay implemented. All79 local checks pass including real old/current ARM builds; PR/CI pending.
+**Review:** https://github.com/tumblewhead/dbg3k/pull/9 (draft, stacked on PR #8)
+**Current stage:** Graphical Kodama task/signal timelines, policy boxes, pool ownership and replay implemented. All79 local checks and both source CI jobs pass; owner review/current terminal retest pending.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
 
-### 2026-11-16: graphical Kodama scheduler view (in progress)
+### 2026-11-16: graphical Kodama scheduler view
 
 Owner requests a full-width graphical task/signal timeline, scheduler explanation
 and pool ownership, rather than another dense table. Added a pure domain model,
@@ -39,7 +39,13 @@ Retained prototype failures: reserved Textual visible property (19 errors), a
 GDB allow_pending keyword unsupported by installed17.2, wrong mouse-event API,
 fixture assumptions about ABI symbols/pool0/char renders/zero-event reevaluation,
 and an exit-time polling race. All corrected; full/local targeted reruns pass.
-Compileall/whitespace pass. Receipt: handoff/kodama-view-validation.json. PR/CI next.
+Compileall/whitespace pass. Receipt: handoff/kodama-view-validation.json.
+Source28350b3 passes both CI jobs43958923440, including the mandatory public ARM
+protocol collector on Ubuntu/GDB15/QEMU8.2. Real old/current Kodama builds passed
+locally; private cross-repository CI is explicitly skipped without its read
+token. Review PR#9. User fetch/switch feature/kodama-visual-state, reinstall
+editable from its venv and restart. The horizontal pane auto-detects known Kodama
+ELFs; Ctrl+P provides setup/expanded view. Original histories/worktree untouched.
 
 ### 2026-11-16: structured stop observations for Kodama tooling
 
