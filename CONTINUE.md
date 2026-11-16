@@ -3,7 +3,7 @@
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/m0-1-mi-textual-scope-001`
 **Review:** https://github.com/tumblewhead/dbg3k/pull/1 (draft)
-**Current stage:** M0.1 TUI refinements with theme/args/returns/history, CI passing, awaiting Arch/QEMU end-to-end test.
+**Current stage:** M0.1 persistent return-ledger and JSONL trace refinement, CI passed, awaiting live Arch/QEMU check.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
@@ -85,6 +85,21 @@ Feature branch `feature/m0-1-mi-textual-scope-001` created. Python GDB/MI parser
 **Fix:** Use only a defined highlight color (`theme.success` or a defensive fallback), and compute a WCAG-luminance-based contrasting black/white foreground for the Rich execution-line span. Do not interpolate optional theme color fields into Rich styles. The regression test constructs an actual 28-line `startup.c` in a temporary directory, feeds a `frames` MI result at line 22 through the `DebuggerApp._handle()` path, and verifies dark and light themes render without crashing. The earlier headless theme test missed this because no source frame had been loaded.
 
 **Validation:** GitHub CI must be green at the latest commit (check post-documentation). A live retest against the user's Kodama QEMU session remains to be done. Keep the frame/scope/watch features unchanged in this hotfix.
+
+
+### 2026-11-15: persistent bar → foo returns and append-only simulation evidence
+
+**User request:** The previous GDB function-finished return annotation vanished after a stop. Keep one row under the caller (e.g., foo) showing the latest callee (e.g., bar) return value as the function is invoked repeatedly; hover for a short return history; click to copy the entire return history; record the simulation's debugger-observable history to a targetname_date.jsonl file.
+
+**Implementation:** Added src/dbg3k/trace.py (TraceWriter), calltree.py ReturnLedger/ReturnSeries/ReturnKey, scope_ui.py ScopeTree hover handling, GDB/MI event wiring in app.py, and --history-dir CLI support. A real GDB *stopped,reason=function-finished* event is recorded as a return record with its stop/thread/caller/callee signature/value and provenance. Ledger aggregation is by thread + caller function + callee function, one visible return row per pair under the active caller. Every newly reported return overwrites the row value and increments its observed count. Hover shows the last ten events and their stop indices; clicking the row copies *every* matching observed return in the **current session** from the JSONL disk file as TSV. The per-row memory cache is only ten events, independent of the log's unbounded append history.
+
+**Evidence store:** Default working-directory-relative dbg3k-history/<ELF-stem>_<local-YYYY-MM-DD>.jsonl, e.g. dbg3k-history/demo_2026-11-15.jsonl, overridden by --history-dir. File is append-only across same-day sessions, each session has an ID, event sequence and timestamp. Writes are flushed after every record. Events cover session start/end, commands, debugger stops, frame stacks, argument batches, locals, global variable readings, function return observations, and GDB errors. A newline separator is inserted when reopening after an interrupted partial final record. See docs/TRACE_JSONL.md for versioned schema and provenance.
+
+**Behavior contract:** Only GDB-reported returns are observed. Normal 'next' / stepping over bar does **not** expose its return value. The reproducible way to get a row is to step into bar with 's', then finish with 'o' to emit 'function-finished', returning to foo. Calls entirely between stops, calls run past by continue, and returns GDB does not report are **not reconstructed**. The ledger currently groups by function name and thread, not exact invocation/call site; recursion or multiple same-name call sites may aggregate, which is explicitly a pending refinement.
+
+**Validation:** Added tests/test_returns_trace.py for replacement of latest values, hover ten, append session isolation and full-session TSV reads; tests/test_visual_smoke.py replays two function-finished MI events from bar into foo, checking persistent tree, hover and disk-based copy. CI is passing after fixes to pre-existing one-stop visual expectations. Live Kodama AN505/QEMU GDB UI still needs user verification.
+
+**Next actions:** Pull latest feature branch on Arch; debug Kodama; enter bar from foo with 's' and finish with 'o' twice, observing one return line under foo with count 2. Hover shows both returns; clicking copies full TSV. Check JSONL path printed in GDB pane, and inspect the file. Then progress to per-invocation/call-site IDs and automatic return interception (requiring actual trace instrumentation), plus previously planned stack/.text/energy profiling.
 
 ## Resuming on the user's Arch Linux workstation
 
