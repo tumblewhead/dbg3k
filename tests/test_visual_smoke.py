@@ -25,7 +25,9 @@ class VisualSmokeTest(unittest.IsolatedAsyncioTestCase):
             ])
             app.model.set_frame_arguments({0: (("n", "2"),)})
             app.model.set_variables(0, [{"name": "n", "value": "2"}])
-            app._last_return = ReturnObservation("main", "foo(2)", "4", app.model.stop)
+            app._returns.observe(
+                ReturnObservation("main", "foo(2)", "4", app.model.stop),
+                thread="unknown", callee_function="foo")
             app._show_scope()
             app._show_watches()
             await pilot.pause()
