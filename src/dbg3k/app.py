@@ -58,7 +58,7 @@ class DebuggerApp(App):
         Binding('Y', 'copy_source', 'Copy file', show=False),
         Binding('W', 'copy_watches', 'Copy watches', show=False),
         Binding('L', 'copy_log', 'Copy log', show=False),
-        Binding('colon', 'focus_console', 'GDB command'),
+        Binding('f2,colon', 'focus_console', 'GDB command'),
         Binding('escape', 'focus_source', 'Leave command', show=False),
         Binding('q', 'quit', 'Quit'),
     ]
