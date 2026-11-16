@@ -5,7 +5,7 @@
   "canonical_branch": "main",
   "working_branch": "feature/m0-1-mi-textual-scope-001",
   "milestone": "M0.1",
-  "status": "THEME_CALLSIGNATURE_RETURNS_WATCH_HISTORY_CI_PASSED_ARCH_PENDING",
+  "status": "RICH_MISSINGSTYLE_STARTUP_HOTFIX_CI_PENDING_ARCH_RETEST",
   "validated": [
     "User reports Textual TUI launches",
     "User reports clicking a scope-tree function shows source",
@@ -16,7 +16,8 @@
     "Global symbol parsing and model/history tests passed in GitHub Actions",
     "Full theme CSS and Rich dynamic styling headless Testual dark/light test passed",
     "GDB/MI argument and return-value parser/model tests passed",
-    "Hoverable watch-row and annotated caller tree headless integration tests passed"
+    "Hoverable watch-row and annotated caller tree headless integration tests passed",
+    "User traceback proves GDB successfully returned Reset_Handler frame from Kodama ARM example"
   ],
   "unvalidated": [
     "Live Textual VerticalScroll behavior on Arch",
@@ -24,14 +25,14 @@
     "Textual OSC52 clipboard with user's terminal, keyboard focus, and CLI input",
     "Real QEMU/GDB global and file-static value reads from AN505 ELF",
     "Live QEMU/GDB argument tuple results and function-finished return events",
-    "Actual terminal tooltip and clipboard behavior for 4096-sample TSV"
+    "Actual terminal tooltip and clipboard behavior for 4096-sample TSV",
+    "Latest contrast-ink fix on user's Arch Textual 7.x / Python 3.14 / QEMU"
   ],
   "next": [
-    "User pull feature branch, pip install -e ., run AN505 QEMU/dbg3k and switch Ctrl+P themes; verify source, call tree, watches, footer, console all change",
-    "At foo(2), verify argument-bearing call tree. Press o/finish and confirm ↳ foo(2) ⟵ 4 appears below caller frame; do not imply returns from normal next",
-    "Observe watch history as 1-2 raw values and sparkline from third numeric sample; hover last-10 values; click row and use H for full TSV export",
-    "Retest main.c::total global watch, local watches, startup/source browsing and copy workflows",
-    "After user smoke receipt: stabilize async GDB stop/frame/args/vars ordering, tackle theme or source UI edge cases, then static .text, stack and instruction profiler"
+    "Confirm GitHub CI on latest branch passes new full-source dark/light regression and all existing tests",
+    "User pulls feature/m0-1-mi-textual-scope-001 and restarts dbg3k on ~/proj/kodama/build/c-main-arm/demo.elf; verify Reset_Handler source line 22 renders, without Rich MissingStyle",
+    "Check theme switching and source highlight contrast in both light and dark built-in themes on actual terminal",
+    "Continue live checks for argument-bearing call tree, function-finished markers, hoverable watch histories, static globals, then profiling roadmap"
   ],
   "decisions": [
     "Scope tree canonical",
@@ -59,7 +60,7 @@
     "docs/DESIGN.md",
     "docs/CONVERSATION_NOTES.md"
   ],
-  "summary": "User confirmed locals; subsequent request implemented whole-app theme tokens, live GDB argument-bearing call labels, stop-scoped GDB-observed function returns, 4096-stop watch history, 1-2 raw values then sparkline, per-cell last-ten tooltip, per-row and all-history TSV clipboard. Headless UI/model CI passes; Arch/QEMU end-to-end retest pending.",
+  "summary": "Live user Kodama/QEMU traceback pinpointed startup MissingStyle in source PC highlight: built-in textual-dark has Theme.background=None, producing invalid 'bold None on #4EBF71'. Source renderer now computes contrasting ink against theme.success (with fallback), and an MI Reset_Handler line-22 headless regression test exercises the exact failure path. Live user retest pending.",
   "known_issues": {
     "reported": [
       "Global and file-static variables not previously shown (new implementation awaiting Arch retest)",
@@ -71,6 +72,7 @@
     "globals": "Implemented and CI-tested; static AN505 total should show as main.c::total, but no live target receipt yet",
     "theme": "All app CSS now uses Textual theme variables; Rich source uses current_theme. Headless dark/light switch verified.",
     "calltree": "GDB MI -stack-list-arguments displays current arguments; function-finished return-value shown in caller on that stop only.",
-    "watch_history": "Two numeric samples as list, three or more as 24-char sparkline, last-ten tooltip, 4096 host-side cap; click row or H copies TSV."
+    "watch_history": "Two numeric samples as list, three or more as 24-char sparkline, last-ten tooltip, 4096 host-side cap; click row or H copies TSV.",
+    "rich_startup": "Reported 2026-11-15: Rich MissingStyle from Theme.background=None in source-line highlight; fixed with luminance-based contrasting foreground and regression test. Awaiting live Arch retest."
   }
 }
