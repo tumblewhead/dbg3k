@@ -67,5 +67,41 @@ class GlobalWatchTests(unittest.TestCase):
         self.assertEqual(len(model.active_watches()), 1)
 
 
+class GlobalEventFlowTests(unittest.TestCase):
+    def test_stop_scoped_global_replies_ignore_stale_results(self):
+        # No running GDB needed; exercise the same token/stop path as the UI.
+        from dbg3k.app import DebuggerApp
+        from dbg3k.globals import GlobalSymbol
+        from dbg3k.mi import Record
+
+        app = DebuggerApp("example.elf", "gdb", "localhost:1234")
+        app._show_scope = lambda: None
+        app._show_watches = lambda: None
+        app.status = "HALTED"
+        app._globals = [GlobalSymbol("global:counter", "global.counter",
+                                      "counter", "counter", "int")]
+        app._globals_discovered = True
+        sent = []
+
+        def fake_send(command, purpose, level=None):
+            token = len(sent) + 1
+            sent.append((command, purpose, level))
+            app.pending[token] = (purpose, level)
+            return token
+
+        app._send = fake_send
+        app.model.begin_stop()
+        app._refresh_globals()
+        app._refresh_globals()
+        self.assertEqual(len(sent), 1)
+        self.assertIn('counter', sent[0][0])
+        app.model.begin_stop()  # previous stop's reply is now stale
+        app._handle(Record(1, '^', 'done', {'value': '9'}))
+        self.assertEqual(app.model.active_globals(), [])
+        app._refresh_globals()
+        app._handle(Record(2, '^', 'done', {'value': '11'}))
+        self.assertEqual(app.model.active_globals()[0].value, '11')
+
+
 if __name__ == "__main__":
     unittest.main()
