@@ -36,6 +36,17 @@ Every object includes: **schema="dbg3k.trace.v1"**, **kind**, **session**, **seq
 | debugger_metadata | GDB version, architecture, connection and available frame/thread metadata |
 | observation_config | stop, enabled, selected expressions, expansion limits |
 | observation | observation_version=1, stop, thread, expression, scope, status, type/value/raw when available, errors, truncated, limits, request, origin |
+| kodama_config | capture, enabled, probes, source-header label mapping/fingerprint |
+| kodama_coverage | data: installed/unavailable API probes |
+| kodama_sample | data: dbg3k.kodama.raw.v1 sample, typed state/event, thread/frame/exception, visible-stop anchor |
+| kodama_diagnostic | data: explicit collector read/limit diagnostic |
+
+Kodama samples drive a domain projection with task/signal timelines, decoded
+waits, derived policy explanations and pool mapping. API entries anchor to the
+preceding visible stop; they do not invent a stop or claim API success. Signal
+names are source mappings, not build-verified values. Scalar nodes use tagged
+strings. See [KODAMA_VIEW.md](KODAMA_VIEW.md) for graphical/replay workflows,
+encoding, coverage and bounds. Existing kinds/readers remain compatible.
 
 `session_start` additionally carries `executable` (path, SHA256, GNU build ID when
 present) and dbg3k version. These additions preserve `dbg3k.trace.v1` and all old

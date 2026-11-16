@@ -16,6 +16,7 @@ VIEWS = {
     'immediate': ('Immediate scope watch', '#watch_panel'),
     'globals': ('Globals', '#global_panel'),
     'console': ('GDB console', '#console_panel'),
+    'kodama': ('Kodama graphical scheduler and timelines', '#kodama_panel'),
     'stack': ('Stack frames and stack watch', '#stack_panel'),
     'instructions': ('Code and instruction counts', '#instruction_panel'),
     'energy': ('Energy estimate', '#energy_panel'),

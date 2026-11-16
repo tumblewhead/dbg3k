@@ -1,13 +1,51 @@
 # dbg3k: development history and continuation
 
 **Repository:** https://github.com/tumblewhead/dbg3k
-**Working branch:** `feature/structured-observations` (based on PR #7's branch)
-**Review:** https://github.com/tumblewhead/dbg3k/pull/8 (draft, stacked on PR #7)
-**Current stage:** Selected typed observations extend dbg3k.trace.v1; all68 local checks and both source CI jobs pass. Real pinned Kodama ARM/QEMU qualified locally; owner review and current-layout/terminal retest pending.
+**Working branch:** `feature/kodama-visual-state` (based on PR #8's branch)
+**Review:** https://github.com/tumblewhead/dbg3k/pull/9 (draft, stacked on PR #8)
+**Current stage:** Graphical Kodama task/signal timelines, policy boxes, pool ownership and replay implemented. All79 local checks and both source CI jobs pass; owner review/current terminal retest pending.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
+
+### 2026-11-16: graphical Kodama scheduler view
+
+Owner requests a full-width graphical task/signal timeline, scheduler explanation
+and pool ownership, rather than another dense table. Added a pure domain model,
+read-only GDB adapter and wide Textual panel/expanded view. Recognizes separate
+active/generation/waiting and packed identity/subscription layouts; task lanes
+include generation. Reads bounded active subscriptions, maps compiler coroutine
+handles to live allocator slots only after token/context validation, and labels
+occupied capacity separately from requested bytes/shared MSP stack. Header signal
+names are explicitly source mappings, not build attestation. Optional API entry
+and validated publication-entry probes supply samples between manual stops;
+request markers never claim successful return or physical time. Raw records stay
+in dbg3k.trace.v1, separate from derived policy explanations. Auto-detect Kodama
+ELF; palette controls preserve existing views and allow a full-width expanded
+canvas. Model/UI/real old and current-layout qualification still in progress.
+
+Validation milestone: all79 local checks pass with actual GDB/QEMU/plugin and
+both real Kodama identity layouts. Both examples reach their normal PASS and an
+explicit final user stop proves all tasks inactive/pool slots free. Independent
+MI validates worker seen bits and its mapped pool occupancy. The current dirty
+sources were copied/hash-pinned to /tmp before build; original checkout untouched.
+Public ARM protocol fixture is mandatory for CI independently of private-repo
+access. Header names remain explicitly source mappings. Replay follows matching
+ELF/session/capture data without launching GDB. Actual-color preview inspected in
+docs/images/kodama-view.png; click/scrub/freeze/follow/expanded/theme flows pass.
+
+Retained prototype failures: reserved Textual visible property (19 errors), a
+GDB allow_pending keyword unsupported by installed17.2, wrong mouse-event API,
+fixture assumptions about ABI symbols/pool0/char renders/zero-event reevaluation,
+and an exit-time polling race. All corrected; full/local targeted reruns pass.
+Compileall/whitespace pass. Receipt: handoff/kodama-view-validation.json.
+Source28350b3 passes both CI jobs43958923440, including the mandatory public ARM
+protocol collector on Ubuntu/GDB15/QEMU8.2. Real old/current Kodama builds passed
+locally; private cross-repository CI is explicitly skipped without its read
+token. Review PR#9. User fetch/switch feature/kodama-visual-state, reinstall
+editable from its venv and restart. The horizontal pane auto-detects known Kodama
+ELFs; Ctrl+P provides setup/expanded view. Original histories/worktree untouched.
 
 ### 2026-11-16: structured stop observations for Kodama tooling
 

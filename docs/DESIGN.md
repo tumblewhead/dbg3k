@@ -79,9 +79,18 @@ The generic GDB Python collector reads typed bounded field/array trees; the
 transport remains MI, the contract/selector validation is independent of the UI,
 and Textual only configures capture. Requests bind stop/thread/frame context;
 late responses cannot mutate a newer stop. No Kodama layout is embedded in the
-exporter. A future Kodama projection consumes observed fields with build/layout
+exporter. A Kodama projection consumes observed fields with build/layout
 awareness and keeps derived scheduler interpretations separate. See
 [OBSERVATIONS.md](OBSERVATIONS.md).
+
+The Kodama projection now has a read-only GDB domain adapter, pure state/history
+model and full-width Textual canvas. It recognizes two identity layouts,
+validates pool bindings, separates occurrence requests/publication entries from
+persistent levels, and explains the derived cooperative policy. Internal entry
+probes collect bounded samples between user stops without changing target
+firmware or advancing visible stop IDs. Raw events stay in the same journal;
+offline replay requires matching ELF/session identity. See
+[KODAMA_VIEW.md](KODAMA_VIEW.md) for contracts and limitations.
 
 - GDB/MI: source, frames, locals, breakpoints, registers, halt and exception events.
 - QEMU plugin (later): executed instruction and optionally SP/call trace with low overhead.

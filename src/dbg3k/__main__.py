@@ -15,12 +15,21 @@ def main():
     p.add_argument('--profile-session', help='Pin --profile-history to one debugger session UUID (default: newest matching profile session)')
     p.add_argument('--observe', action='append', default=[], metavar='EXPRESSION',
                    help='Capture this read-only selector at each stop (repeatable; up to 16) in the existing JSONL trace')
+    kodama = p.add_mutually_exclusive_group()
+    kodama.add_argument('--kodama', action='store_true', default=None, help='Enable graphical Kodama view (default: detect ELF)')
+    kodama.add_argument('--no-kodama', action='store_false', dest='kodama', help='Disable automatic Kodama view')
+    p.add_argument('--kodama-header', type=Path, help='Application header containing signal bit names')
+    p.add_argument('--kodama-no-probes', action='store_false', dest='kodama_probes', help='Collect only manual-stop Kodama snapshots')
+    p.add_argument('--kodama-history', type=Path, help='View/follow a Kodama JSONL journal without starting GDB')
+    p.add_argument('--kodama-session', help='Pin --kodama-history to one debugger session UUID')
     p.add_argument('--ua-per-mhz', type=float, help='Assumed active current slope (µA/MHz)')
     p.add_argument('--mips-per-mhz', type=float, help='Assumed instruction throughput (MIPS/MHz)')
     p.add_argument('--voltage', type=float, help='Assumed supply voltage (V)')
     args = p.parse_args()
     if args.profile_session and not args.profile_history:
         p.error('--profile-session requires --profile-history')
+    if args.kodama_session and not args.kodama_history:
+        p.error('--kodama-session requires --kodama-history')
     if not args.elf.is_file():
         p.error(f"ELF not found: {args.elf}")
     from .app import DebuggerApp
@@ -44,7 +53,12 @@ def main():
                 instruction_profile=str(args.instruction_profile) if args.instruction_profile else None,
                 energy_model=energy,
                 profile_history=str(args.profile_history) if args.profile_history else None,
-                profile_session=args.profile_session, observations=args.observe).run()
+                profile_session=args.profile_session, observations=args.observe,
+                kodama=args.kodama if args.kodama is not None else (True if args.kodama_header else None),
+                kodama_header=str(args.kodama_header) if args.kodama_header else None,
+                kodama_probes=args.kodama_probes,
+                kodama_log=str(args.kodama_history) if args.kodama_history else None,
+                kodama_session=args.kodama_session).run()
 
 if __name__ == "__main__":
     main()
