@@ -1,8 +1,8 @@
 # dbg3k: development history and continuation
 
 **Repository:** https://github.com/tumblewhead/dbg3k
-**Working branch:** `feature/selectable-debugger-views` (based on `feature/m0-1-mi-textual-scope-001`)
-**Review:** https://github.com/tumblewhead/dbg3k/pull/2 (draft, based on the M0.1 branch; original work in PR #1)
+**Working branch:** `feature/selectable-debugger-views` (continues the owner-merged views branch)
+**Review:** https://github.com/tumblewhead/dbg3k/pull/4 (draft, against main; earlier PRs #2/#3 merged by owner)
 **Current stage:** Palette Left/Right toggles and automatic return capture during ordinary stepping; 43 local checks pass including real GDB/QEMU AN505.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
@@ -45,6 +45,9 @@ user retest. Updates stay on feature/selectable-debugger-views. PR #2 was alread
 merged by the owner; follow-up changes need a new review PR. An added non-view
 arrow test initially used Ctrl+A as select-all (Textual uses it as Home); corrected
 the setup to an exact Theme query, and verified normal Left search editing.
+Follow-up review is PR #4 against main. Main's tree was verified identical to
+the previous feature tip before merging its ancestry into the current branch;
+existing users can still pull --ff-only.
 
 ### 2026-11-15: selectable panes and immediate scope watches
 
