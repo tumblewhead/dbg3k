@@ -84,3 +84,37 @@ both local and global values, with shared change detection and sparklines.
 
 Try the bundled AN505 example: `main.c::total` should appear even while
 stepping through `foo()` and `bar()`, and its value/history should change.
+
+## Theme, call-tree and watch-history experience (M0.1 UI refinement)
+
+**Theme:** The command palette's themes now drive the entire application
+via Textual CSS theme variables, including the source pane, call tree,
+watch rows, GDB input, headers, borders, and console. The source view's
+Rich text markup uses the active theme as well. Open Textual's palette
+(`Ctrl+P`) and try `textual-light`, `nord`, or `dracula`.
+
+**Call tree:** GDB/MI `-stack-list-arguments` supplies argument values
+for active frames. For example, the scope tree can display `foo(2)`
+rather than `foo()` when symbols are available. A GDB
+`function-finished` stop (typically the `o` key / `finish`) adds
+an observed return under the caller, such as `↳ foo(2) ⟵ 4`.
+If GDB does not report the result, the UI says so. Ordinary stepping
+over a call does **not** reveal a return value automatically: those
+values require an observable GDB finish event, not inference.
+
+**Watch histories:** Each watch has its own line and hoverable history
+cell. The first two numeric samples appear as a short number list; once
+three numeric observations exist, they become a 24-column sparkline.
+Hover over that history cell for its **last ten debugger-stop values**.
+Click a watch row to copy all of that watch's retained history (TSV);
+press `H` to copy the retained histories of **all** watches, including
+locals that have gone out of scope. `W` still copies the current watch
+values. Host-side history retention is bounded to **4096 observations
+per watch** rather than the previous 128. The oldest values are evicted
+past that capacity and are not recoverable. The count is samples at
+GDB stops, not time-series data collected while firmware runs.
+
+**Verification:** Automated Python/model, GDB/MI parsing, Textual
+headless theme tests, and headless pane tests run in GitHub Actions.
+A real GDB/QEMU/Arch smoke test is still needed to confirm that
+argument values and finish notifications look right for AN505.
