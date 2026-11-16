@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dbg3k"
+version = "0.1.0a0"
+description = "Scope-first terminal debugger for embedded firmware"
+requires-python = ">=3.11"
+dependencies = ["textual>=0.80,<8", "rich>=13,<16"]
+
+[project.scripts]
+dbg3k = "dbg3k.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

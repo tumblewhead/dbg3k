@@ -1,0 +1,48 @@
+{
+  "schema": "dbg3k/handoff/v1",
+  "date": "2026-11-15",
+  "repository": "https://github.com/tumblewhead/dbg3k.git",
+  "canonical_branch": "main",
+  "working_branch": "feature/m0-1-mi-textual-scope-001",
+  "milestone": "M0.1",
+  "status": "IMPLEMENTED_UNQUALIFIED",
+  "validated": [
+    "MI parser unit tests",
+    "scope model unit tests",
+    "Python compileall"
+  ],
+  "unvalidated": [
+    "Live Textual UI launch",
+    "GDB/MI real connection",
+    "QEMU AN505 sample build",
+    "end-to-end stepping"
+  ],
+  "next": [
+    "Verify on Arch with QEMU AN505 and Textual, record versions and behavior",
+    "Add fake-GDB subprocess protocol tests",
+    "Improve GDB control and UI features",
+    "Add assembly pane, register MSP/PSP, editable GDB console",
+    "Implement instruction histogram and static text size in M0.3"
+  ],
+  "decisions": [
+    "Scope tree canonical",
+    "function.local symbol labels",
+    "bounded stop histories",
+    "dynamic guest instruction share not CPU cycles",
+    "stack frame, cumulative depth and inclusive peak distinct",
+    "energy estimate explicit assumptions",
+    "single-key step and repeat"
+  ],
+  "limitations": [
+    "no measured instruction/stack/energy profiles",
+    "no pin watches or globals",
+    "histories are sampled stops only",
+    "cannot see calls entirely between halts"
+  ],
+  "references": [
+    "README.md",
+    "AGENTS.md",
+    "docs/DESIGN.md",
+    "docs/CONVERSATION_NOTES.md"
+  ]
+}
