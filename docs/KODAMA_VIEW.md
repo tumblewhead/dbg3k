@@ -66,7 +66,9 @@ of guaranteed execution or an exact invocation trace.
 Signal rows combine two separate namespaces. A filled dot is an observed entry
 to internal signal_locked with its actual occurrence argument; zero-occurrence
 level reevaluation creates no occurrence marker. A triangle is an API request
-that can fail; up/down arrows are level requests. Solid/dotted cells are observed
+that can fail; paired `△↑`/`△↓` markers are level-high/level-low requests (`△?`
+when the requested direction is unavailable). Both symbols occupy the same sample
+cell; subsequent waveform cells show observed values. Solid/dotted cells are observed
 persistent level high/low values. Occurrences have no persistent global on/off
 state. Request/publication-entry markers are not completion/success records.
 

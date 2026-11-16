@@ -1,13 +1,31 @@
 # dbg3k: development history and continuation
 
 **Repository:** https://github.com/tumblewhead/dbg3k
-**Working branch:** `feature/kodama-visual-state` (based on PR #8's branch)
-**Review:** https://github.com/tumblewhead/dbg3k/pull/9 (draft, stacked on PR #8)
-**Current stage:** Graphical Kodama task/signal timelines, policy boxes, pool ownership and replay implemented. All79 local checks and both source CI jobs pass; owner review/current terminal retest pending.
+**Working branch:** `fix/kodama-level-request-markers` (based on PR #9's branch)
+**Review:** Follow-up PR pending; graphical view baseline: https://github.com/tumblewhead/dbg3k/pull/9
+**Current stage:** Level requests retain the API triangle beside their direction arrow. Local suite: 80 tests, 73 pass/7 opt-in QEMU skips; compileall/whitespace pass. Baseline real-QEMU evidence below remains separate from this UI-only change.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
+
+### 2026-11-16: retain level API request triangles
+
+User noticed occurrence publication entries had an API triangle, but level
+changes did not. The level-request rendering branch replaced the triangle with
+the direction arrow. Render `△↑`/`△↓` (or `△?` for unavailable direction) in the
+same two-column sample cell. The following waveform remains based on observed
+levels, not an assumed successful request. Updated the legend and view guide.
+
+Headless regression covers rising/falling/repeated/unknown requests, unknown
+levels, occurrence publication counts, and clicking the second symbol to scrub
+to the correct sample. The inspector still reports LOW at a high-request entry
+until a later observation reports HIGH. First test attempt incorrectly cleared
+the fixture deque without resetting its sequence counter (one failure); fixed
+the fixture using the model's reset API. Full suite: 80 tests in 18.939s, 73 pass
+and 7 opt-in real-QEMU tests skipped. Compileall and whitespace pass. No collector
+changes; real QEMU and physical hardware were not rerun for this display fix.
+Existing user capture directories remain untouched and untracked.
 
 ### 2026-11-16: graphical Kodama scheduler view
 
