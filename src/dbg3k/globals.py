@@ -8,7 +8,7 @@ from typing import Any
 
 # Bound UI and remote GDB work. A later watch picker can select more symbols.
 MAX_GLOBAL_WATCHES = 64
-_SYMBOL = re.compile(r"[A-Za-z_][A-Za-z_0-9]*(?:::[A-Za-z_][A-Za-z_0-9]*)*\\Z")
+_SYMBOL = re.compile(r"[A-Za-z_][A-Za-z_0-9]*(?:::[A-Za-z_][A-Za-z_0-9]*)*\Z")
 
 
 @dataclass(frozen=True)
@@ -42,7 +42,7 @@ def discover_globals(payload: dict[str, Any], limit: int = MAX_GLOBAL_WATCHES) -
             name = entry.get("name")
             if not isinstance(name, str) or not _SYMBOL.fullmatch(name):
                 continue
-            is_static = bool(re.search(r"\\bstatic\\b", str(entry.get("description", ""))))
+            is_static = bool(re.search(r"\bstatic\b", str(entry.get("description", ""))))
             if is_static and not filename:
                 continue  # Do not evaluate an ambiguous file-static name.
             key = f"static:{filename}:{name}" if is_static else f"global:{name}"
