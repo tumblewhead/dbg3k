@@ -5,24 +5,24 @@
   "canonical_branch": "main",
   "working_branch": "feature/m0-1-mi-textual-scope-001",
   "milestone": "M0.1",
-  "status": "IMPLEMENTED_UNQUALIFIED",
+  "status": "SOURCE_SCROLL_PATCHED_WATCH_DIAGNOSTICS_PENDING_ARCH_RETEST",
   "validated": [
-    "MI parser unit tests",
-    "scope model unit tests",
-    "Python compileall"
+    "User reports Textual TUI launches",
+    "User reports clicking a scope-tree function shows source",
+    "Ten MI parser and scope-model unit tests in builder",
+    "Python compileall in builder"
   ],
   "unvalidated": [
-    "Live Textual UI launch",
-    "GDB/MI real connection",
-    "QEMU AN505 sample build",
-    "end-to-end stepping"
+    "Live Textual VerticalScroll behavior on Arch",
+    "Actual GDB/MI local-variable results and watch updates",
+    "QEMU AN505 example build/run in builder"
   ],
   "next": [
-    "Verify on Arch with QEMU AN505 and Textual, record versions and behavior",
-    "Add fake-GDB subprocess protocol tests",
-    "Improve GDB control and UI features",
-    "Add assembly pane, register MSP/PSP, editable GDB console",
-    "Implement instruction histogram and static text size in M0.3"
+    "Run Arch/QEMU smoke test for mouse and keyboard source scrolling without PC movement",
+    "Step naturally from Reset_Handler to main, foo, bar (never auto-skip startup)",
+    "Verify local-watch results at each stop; collect MI result, version and error if still absent",
+    "Add repeatable fake-GDB tests and independent source-function navigator",
+    "Add assembly/register panels, static .text sizes, stack contribution and QEMU TCG counters"
   ],
   "decisions": [
     "Scope tree canonical",
@@ -40,9 +40,18 @@
     "cannot see calls entirely between halts"
   ],
   "references": [
-    "README.md",
+    "CONTINUE.md",
     "AGENTS.md",
+    "README.md",
     "docs/DESIGN.md",
     "docs/CONVERSATION_NOTES.md"
-  ]
+  ],
+  "summary": "User confirmed first TUI launch and function selection. Fixed source excerpt by rendering full file in VerticalScroll; made GDB locals requests and failures explicit. Pending end-to-end retest.",
+  "known_issues": {
+    "reported": [
+      "Source stuck displaying ~20-33 lines",
+      "Local watches never appear"
+    ],
+    "watch_root_cause": "UNCONFIRMED; capture real MI result and any visible error"
+  }
 }
