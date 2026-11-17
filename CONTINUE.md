@@ -1,13 +1,40 @@
 # dbg3k: development history and continuation
 
 **Repository:** https://github.com/tumblewhead/dbg3k
-**Working branch:** `feature/kodama-readable-inspector` (based on PR #10)
-**Review:** https://github.com/tumblewhead/dbg3k/pull/10 (draft, stacked on PR #9)
-**Current stage:** Level requests retain the API triangle beside their direction arrow. Local suite: 80 tests, 73 pass/7 opt-in QEMU skips; compileall/whitespace pass. Baseline real-QEMU evidence below remains separate from this UI-only change.
+**Working branch:** `feature/kodama-live-superloop` (based on PR #11)
+**Review:** https://github.com/tumblewhead/dbg3k/pull/12 (draft, stacked on PR #11)
+**Current stage:** Continuous one-second Kodama superloop implemented. 82 tests:74 pass/8 opt-in skips; real QEMU/GDB live-demo test passes; compileall/whitespace pass.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
+
+### 2026-11-17: continuous Kodama superloop
+
+User requests a one-second trigger and main that cannot return and finish QEMU.
+Added examples/kodama-live: separate C main/startup with real100Hz AN505 SysTick,
+reusing the actual Kodama C-main tasks and linker. A run starts immediately then
+on100-tick triggers; one pending run retained, excess triggers counted/coalesced,
+no overlapping task sets. Main dispatches cooperatively and uses WFE when idle;
+IRQ publishes ticks and SEV, never executes coroutine tasks. Clears INIT_READY
+before each run; checks frame reclamation at completion. Startup also parks if
+main accidentally returns. Existing finite example, kernel, source checkout and
+user histories untouched. Exact live.elf launch pairing is in the example guide.
+
+Real QEMU/GDB regression passed1 test in3.760s: source at main, break at third
+completion, live/pool0, allocations=frees9, trigger/tick counts, and fourth full
+run after detach with QEMU still alive. Starts at ticks0/100/200/300. Sandbox
+socket-denied attempt retained; approved rerun passes. Full ordinary suite82 in
+18.666s:74 passed/8 opt-in skips. Compileall/whitespace pass. CI can run the new
+real test when its existing optional Kodama checkout token is available.
+Source hashes, ELF hash, tool versions/oracle: handoff/kodama-live-validation.json.
+PR#12 source e52c864 CI44018276909 queued at handoff. Pull the live branch and
+use its paired launch commands; owner review remains before merging.
+Physical M23, actual terminal and integrated stack/latency unqualified. One second
+is emulated time; debugger stops can stretch/coalesce timer delivery. Existing
+4096 capture/512 display limits remain; timer probes consume budget. Application
+error loop stays alive; original task assertion exits remain fault behavior.
+
 
 ### Readable inspector and explicit copying
 

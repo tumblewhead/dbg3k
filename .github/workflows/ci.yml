@@ -53,6 +53,7 @@ jobs:
         run: |
           OUT="$RUNNER_TEMP/kodama-arm" sh examples/c-main/arm/build.sh
           echo "DBG3K_KODAMA_ELF=$RUNNER_TEMP/kodama-arm/demo.elf" >> "$GITHUB_ENV"
+          echo "DBG3K_KODAMA_SOURCE=$GITHUB_WORKSPACE/.kodama-fixture" >> "$GITHUB_ENV"
       - name: Report optional Kodama coverage
         if: env.KODAMA_READ_TOKEN == ''
         run: echo "Kodama CI capture skipped (KODAMA_READ_TOKEN unavailable). Generic ARM/QEMU observations remain mandatory; see the independently recorded local Kodama receipt."
