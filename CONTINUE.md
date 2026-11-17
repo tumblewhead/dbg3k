@@ -2,7 +2,7 @@
 
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/kodama-live-superloop` (based on PR #11)
-**Review:** Follow-up PR pending; inspector baseline https://github.com/tumblewhead/dbg3k/pull/11
+**Review:** https://github.com/tumblewhead/dbg3k/pull/12 (draft, stacked on PR #11)
 **Current stage:** Continuous one-second Kodama superloop implemented. 82 tests:74 pass/8 opt-in skips; real QEMU/GDB live-demo test passes; compileall/whitespace pass.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
@@ -28,6 +28,8 @@ socket-denied attempt retained; approved rerun passes. Full ordinary suite82 in
 18.666s:74 passed/8 opt-in skips. Compileall/whitespace pass. CI can run the new
 real test when its existing optional Kodama checkout token is available.
 Source hashes, ELF hash, tool versions/oracle: handoff/kodama-live-validation.json.
+PR#12 source e52c864 CI44018276909 queued at handoff. Pull the live branch and
+use its paired launch commands; owner review remains before merging.
 Physical M23, actual terminal and integrated stack/latency unqualified. One second
 is emulated time; debugger stops can stretch/coalesce timer delivery. Existing
 4096 capture/512 display limits remain; timer probes consume budget. Application
