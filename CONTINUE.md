@@ -1,13 +1,40 @@
 # dbg3k: development history and continuation
 
 **Repository:** https://github.com/tumblewhead/dbg3k
-**Working branch:** `feature/kodama-live-superloop` (based on PR #11)
-**Review:** https://github.com/tumblewhead/dbg3k/pull/12 (draft, stacked on PR #11)
-**Current stage:** Continuous one-second Kodama superloop implemented. 82 tests:74 pass/8 opt-in skips; real QEMU/GDB live-demo test passes; compileall/whitespace pass.
+**Working branch:** `feature/kodama-wiring-import` (based on PR #12)
+**Review:** https://github.com/tumblewhead/dbg3k/pull/13 (draft, stacked on PR #12)
+**Current stage:** Offline Miro JSON → YAML importer with bounded AND/OR grammar and strict bidirectional producer/consumer checks. 93 tests:85 pass/8 opt-in skips; compileall/whitespace pass.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
+
+### 2026-11-17: validated wiring import and explicit Boolean sensitivities
+
+Owner wants only wiring/dependencies in the diagram, with explicit A AND B
+rather than implicit AB and no produced-but-unconsumed or consumed-without-
+producer signals. Added pure offline kodama_wiring module/CLI and guide. Bounded
+BNF-defined AND/OR/parenthesis parser, separate occurrence/level namespaces,
+explicit External endpoints, producer/consumer coverage for every expression atom,
+recognized spawn relations and item/edge provenance. Separate edges stay separate;
+task body SUPERLOOP/PEND annotations never supply sequencing or Boolean grouping.
+AB is an identifier. Legacy subAND[A,B] normalizes to A AND B. Case sensitivity
+is preserved; aliases require explicit flags and remain in YAML. Unsupported,
+ambiguous, dangling, duplicate and malformed wiring fails before output creation;
+existing YAML is never overwritten. No new runtime dependencies/firmware changes.
+
+Actual clean user export kodama-diagram(2).json (5 shapes/12 connectors) correctly
+fails with four unmatched b/B,c/C dependency diagnostics. Explicit --alias b=B
+--alias c=C passes; local review artifact build/wiring/kodama.yaml retains source
+hash/item IDs and independent sensitivities. System PyYAML6.0.3 readback matches
+the normalized model, including ambiguous YAML key quoting. Raw export/user
+artifacts are not committed or transmitted. Added11 grammar/graph/CLI tests;
+full suite93 in18.887s:85 pass/8 opt-in skips. Compileall/whitespace pass. QEMU not
+rerun for this offline importer; header generation and post-edit YAML validation
+remain explicit later work. Receipt: handoff/kodama-wiring-validation.json.
+Review PR#13; pull feature/kodama-wiring-import. Source738fcc5 is locally
+validated; remote CI status should be checked before review/merge.
+
 
 ### 2026-11-17: continuous Kodama superloop
 
