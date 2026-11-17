@@ -155,3 +155,14 @@ cover identity reuse/regression, retirement, ownership, priority/list policy,
 unknowns, exception context, replay, actual mouse/keyboard and theme flows.
 Actual terminal and physical hardware qualification remain separate.
 
+
+### Readable activity and copying
+
+Activity arguments show a task name and generation when a context or subscription
+uniquely matches an active task in the selected sample. Addresses remain visible;
+new or ambiguous subscriptions remain unresolved. Aliases do not prove ownership
+at unobserved times. Long activity calls wrap beneath their own heading.
+
+Use **Copy** or focus the canvas and press **Ctrl+C** to copy selected text;
+without a selection this copies the whole rendered view. Textual sends clipboard
+contents through the terminal clipboard mechanism; terminal support is required.

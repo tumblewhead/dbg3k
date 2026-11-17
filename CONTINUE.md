@@ -1,13 +1,28 @@
 # dbg3k: development history and continuation
 
 **Repository:** https://github.com/tumblewhead/dbg3k
-**Working branch:** `fix/kodama-level-request-markers` (based on PR #9's branch)
+**Working branch:** `feature/kodama-readable-inspector` (based on PR #10)
 **Review:** https://github.com/tumblewhead/dbg3k/pull/10 (draft, stacked on PR #9)
 **Current stage:** Level requests retain the API triangle beside their direction arrow. Local suite: 80 tests, 73 pass/7 opt-in QEMU skips; compileall/whitespace pass. Baseline real-QEMU evidence below remains separate from this UI-only change.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
+
+### Readable inspector and explicit copying
+
+Unique live subscription/context bindings now show task name and generation beside
+raw addresses; subscription aliases include decoded waits. Unbound/new/ambiguous
+pointers remain raw, without stale historical ownership guesses. Copy button and
+focused Ctrl+C copy Textual selection or the whole canvas. Clipboard delivery uses
+Textual's terminal clipboard mechanism and depends on terminal support. Activity
+has its own spaced heading, long calls wrap, and navigation hints are shorter.
+This is a modest spacing/readability pass, not a complete visual redesign.
+Validation: 81 tests in 19.130s, 74 passed/7 opt-in QEMU skipped; compileall and
+whitespace pass. Tests cover live/stale aliases, retained addresses and Copy button.
+Actual terminal clipboard, firmware and physical hardware not rerun. Review PR
+pending against fix/kodama-level-request-markers. User captures untouched.
+
 
 ### 2026-11-16: retain level API request triangles
 
