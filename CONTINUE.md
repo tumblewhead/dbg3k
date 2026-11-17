@@ -1,13 +1,30 @@
 # dbg3k: development history and continuation
 
 **Repository:** https://github.com/tumblewhead/dbg3k
-**Working branch:** `fix/kodama-capture-rearm` (based on PR #14)
-**Review:** https://github.com/tumblewhead/dbg3k/pull/15 (draft, stacked on PR #14)
-**Current stage:** Re-arm bounded API capture at each visible stop; preserve fresh snapshots and explicit capture gaps.101 tests:91 pass/10 opt-in skips; five real QEMU checks pass; compileall/whitespace pass.
+**Working branch:** `feature/kodama-pool-color-key` (based on PR #15)
+**Review:** draft PR pending, stacked on https://github.com/tumblewhead/dbg3k/pull/15
+**Current stage:** Coroutine pool color key and explicit row states.101 tests:91 pass/10 opt-in skips; compileall/whitespace pass.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
+
+### 2026-11-17: explain coroutine pool colors
+
+User asks what changing pool colors mean. Pool slots inherit their matched
+owner task's scheduler-state color; free slots are dim, occupied/unattributed
+slots use warning and unavailable occupancy uses error. Added a colored Owner
+state key using the exact same theme palette, plus Other slots key and explicit
+state text beside each slot number. The key wraps at narrow widths and separates
+same-colored meanings; unknown/unattributed states stay explicit. Allocation
+capacity and shared MSP accounting are unchanged.
+
+Full suite101 in23.289s:91 pass/10 opt-in skips; compileall/whitespace pass.
+Visually inspected true-color dark/light and80-column previews, explicitly
+illustrative fixture data, in /tmp/dbg3k-pool-key-preview. Ordinary tests also
+respect the environment's NO_COLOR setting. UI-only; no target/QEMU rerun or
+interactive-terminal claim. Receipt:handoff/kodama-pool-key-validation.json.
+Next: publish/review PR, check CI, pull this branch and restart dbg3k.
 
 ### 2026-11-17: API capture resumes after budget exhaustion
 

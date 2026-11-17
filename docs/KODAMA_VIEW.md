@@ -116,6 +116,15 @@ data address. Pending construction/destruction, stale/ambiguous bindings and
 unsupported handle layouts stay unknown. Supported ARM/GCC frames use a bounded
 read of live allocator storage to resolve a compiler actor symbol for task names.
 
+The pool's **Owner state** color key uses the same theme colors as the task lanes:
+running (success/usually green), ready (primary/usually blue), waiting and
+interrupted (warning/usually yellow), sleeping (purple), parked (accent), and
+unknown state (error/usually red). A slot can change color as its owner runs,
+waits or sleeps while the frame remains allocated. **Other slots** identifies
+dim free slots, warning-colored occupied slots with an unattributed owner, and
+error-colored unavailable occupancy. Each row also names its state so equal
+theme colors or monochrome terminals do not make the meaning ambiguous.
+
 Occupied payload CAPACITY, total payload capacity, slot extent and whole reserved
 pool bytes are distinct. Reservation includes occupancy/alignment overhead.
 Requested bytes for each allocation are unavailable: occupied 512 B capacity

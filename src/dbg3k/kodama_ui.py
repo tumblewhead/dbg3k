@@ -162,6 +162,17 @@ class KodamaCanvas(Static, can_focus=True):
         def line(text='', style=None, wrap=False):
             for part in (wrap_text(text, width=max(10, self.size.width), replace_whitespace=False) or ['']) if wrap else [text]:
                 out.append(part + '\n', style=style)
+        def color_key(prefix, entries):
+            out.append(prefix, style='dim')
+            column = len(prefix)
+            for label, style in entries:
+                if column + len(label) + 2 > max(20, self.size.width) and column > len(prefix):
+                    out.append('\n' + ' ' * len(prefix))
+                    column = len(prefix)
+                out.append(label, style=style)
+                out.append('  ')
+                column += len(label) + 2
+            out.append('\n')
         samples = list(self.history.samples)
         if self._capture != self.history.capture:
             self.cursor = self.viewport_start = None
@@ -319,6 +330,10 @@ class KodamaCanvas(Static, can_focus=True):
                     f'sample {last.index}, tick {last.tick if last.tick is not None else "?"}' if last else 'unobserved')
         line()
         line('COROUTINE POOL  ·  occupied slot capacity, separate from shared MSP stack', 'bold')
+        color_key('  Owner state: ', [(GLYPHS[state] + ' ' + state, colors[state]) for state in
+                  ('running', 'ready', 'waiting', 'sleeping', 'parked', 'interrupted', 'unknown')])
+        color_key('  Other slots: ', [('░ free', 'dim'), ('█ unattributed', colors['waiting']),
+                                     ('? unavailable', colors['unknown'])])
         used = [p for p in current.pool if p.used is True]
         uncertain = [p for p in current.pool if p.used is None]
         total_payload = sum(p.capacity for p in current.pool)
@@ -330,8 +345,9 @@ class KodamaCanvas(Static, can_focus=True):
             for p in current.pool:
                 owner = next((t for t in current.tasks if t.key == p.owner), None)
                 style = colors[owner.state] if owner else colors['waiting'] if p.used else 'dim' if p.used is False else colors['unknown']
+                state = owner.state if owner else 'unattributed' if p.used is True else 'free' if p.used is False else 'unavailable'
                 block = ('█' * 8) if p.used else ('░' * 8) if p.used is False else ('?' * 8)
-                line(f'  [{block}] pool{p.index}  {p.address}  {p.capacity} B capacity  →  {p.name}', style)
+                line(f'  [{block}] pool{p.index:<2} {state:<12} {p.address}  {p.capacity} B capacity  →  {p.name}', style)
             line('  Actual requested coroutine bytes per allocation unavailable; capacity is not a measured frame size.', 'dim')
             allocator = current.raw.get('allocator', {})
             diagnostics = [('alloc', 'g_allocations'), ('free', 'g_frees'), ('peak slots', 'g_peak'),
