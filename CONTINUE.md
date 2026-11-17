@@ -2,7 +2,7 @@
 
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/kodama-demo-handoff` (based on PR #16)
-**Review:** draft PR pending, stacked on https://github.com/tumblewhead/dbg3k/pull/16
+**Review:** draft https://github.com/tumblewhead/dbg3k/pull/17, stacked on PR #16
 **Current stage:** Complete demo operator guide, printable HTML and plugin-enabled paired launcher.103 tests:92 pass/11 opt-in skips; real workshop/plugin checks pass; compileall/whitespace pass.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
@@ -40,7 +40,9 @@ passes26 loop dispatches. Retained failures:initial sandbox socket denial;
 test's GDB true/int parsing corrected. Existing user histories remain untouched.
 Receipt:handoff/kodama-demo-handoff-validation.json; local evidence in
 /tmp/dbg3k-workshop-receipt. No measured-power, physical hardware, full-hour QEMU
-or interactive-terminal qualification. Next:publish/review PR,check CI,share guide.
+or interactive-terminal qualification. Published as draft PR #17; source commit
+1a092e4ba86e42e986f114a650785cb217cd7272. No Actions runs returned at initial
+publication check. Next:review PR/check CI and share the guide.
 
 ### 2026-11-17: explain coroutine pool colors
 
