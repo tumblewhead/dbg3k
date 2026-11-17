@@ -2,7 +2,7 @@
 
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `fix/kodama-capture-rearm` (based on PR #14)
-**Review:** draft PR pending, stacked on https://github.com/tumblewhead/dbg3k/pull/14
+**Review:** https://github.com/tumblewhead/dbg3k/pull/15 (draft, stacked on PR #14)
 **Current stage:** Re-arm bounded API capture at each visible stop; preserve fresh snapshots and explicit capture gaps.101 tests:91 pass/10 opt-in skips; five real QEMU checks pass; compileall/whitespace pass.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
@@ -43,8 +43,8 @@ disable while running, so that approach was removed; test's zero-start clock
 assumption corrected; gap marker/long numeric axis overlap fixed with its own
 row. No physical/terminal qualification. Receipt:
 handoff/kodama-capture-rearm-validation.json; local evidence/preview in
-/tmp/dbg3k-budget-receipt. Next: publish/review PR, check CI, pull this branch and
-restart dbg3k; continue twice and use End to follow new activity.
+/tmp/dbg3k-budget-receipt. Review PR#15; source7ed740c locally validated. Next: check CI, pull this branch
+and restart dbg3k; continue twice and use End to follow new activity.
 
 ### 2026-11-17: draggable Kodama history scrollbar
 
