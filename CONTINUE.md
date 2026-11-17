@@ -2,7 +2,7 @@
 
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/kodama-wiring-import` (based on PR #12)
-**Review:** Wiring importer follow-up pending; baseline https://github.com/tumblewhead/dbg3k/pull/12
+**Review:** https://github.com/tumblewhead/dbg3k/pull/13 (draft, stacked on PR #12)
 **Current stage:** Offline Miro JSON → YAML importer with bounded AND/OR grammar and strict bidirectional producer/consumer checks. 93 tests:85 pass/8 opt-in skips; compileall/whitespace pass.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
@@ -32,6 +32,8 @@ artifacts are not committed or transmitted. Added11 grammar/graph/CLI tests;
 full suite93 in18.887s:85 pass/8 opt-in skips. Compileall/whitespace pass. QEMU not
 rerun for this offline importer; header generation and post-edit YAML validation
 remain explicit later work. Receipt: handoff/kodama-wiring-validation.json.
+Review PR#13; pull feature/kodama-wiring-import. Source738fcc5 is locally
+validated; remote CI status should be checked before review/merge.
 
 
 ### 2026-11-17: continuous Kodama superloop
