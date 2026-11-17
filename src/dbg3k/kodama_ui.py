@@ -3,7 +3,9 @@ from rich.text import Text
 from textwrap import wrap as wrap_text
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.message import Message
 from textual.screen import ModalScreen
+from textual.scrollbar import ScrollBar, ScrollLeft, ScrollRight, ScrollTo
 from textual.widgets import Button, Input, Label, Static, Switch
 
 from .kodama_model import integer, val
@@ -32,6 +34,8 @@ def event_arguments(sample, history):
 
 class KodamaCanvas(Static, can_focus=True):
     BINDINGS = [Binding('left', 'older', 'Older'), Binding('right', 'newer', 'Newer'),
+                Binding('home', 'first', 'Oldest'), Binding('pageup', 'page(-1)', 'History ←'),
+                Binding('pagedown', 'page(1)', 'History →'),
                 Binding('end', 'live', 'Live'), Binding('up', 'task(-1)', 'Task ↑'),
                 Binding('down', 'task(1)', 'Task ↓'), Binding('ctrl+c', 'copy', 'Copy')]
     DEFAULT_CSS = 'KodamaCanvas { height: auto; } KodamaCanvas:focus { background: $surface; }'
@@ -46,9 +50,18 @@ class KodamaCanvas(Static, can_focus=True):
         self.signal_hits = {}
         self.hits = {}
         self.visible_samples = []
+        self.viewport_start = None  # Absolute sample identity; survives appends/evictions.
+        self.window_start = 0
+        self.window_size = 1
         self.lane_gutter = 32
         self.target_status = ''
         self.capture_enabled = False
+        self._capture = history.capture
+
+    class WindowChanged(Message):
+        def __init__(self, canvas):
+            super().__init__()
+            self.canvas = canvas
 
     def on_resize(self):
         self.redraw()
@@ -73,7 +86,30 @@ class KodamaCanvas(Static, can_focus=True):
 
     def action_live(self):
         self.cursor = None
+        self.viewport_start = None
         self.redraw()
+
+    def pan_history(self, start):
+        samples = list(self.history.samples)
+        if not samples:
+            return
+        start = max(0, min(round(start), len(samples) - min(self.window_size, len(samples))))
+        current = next((i for i, s in enumerate(samples) if s.index == self.cursor), len(samples) - 1)
+        # Keep the inspected sample if it is visible, otherwise select the nearest
+        # edge. The inspector and highlighted cell always describe this viewport.
+        current = max(start, min(current, start + self.window_size - 1))
+        self.cursor = samples[current].index
+        self.viewport_start = samples[start].index
+        self.redraw()
+
+    def action_page(self, direction):
+        self.pan_history(self.window_start + direction * max(1, self.window_size - 1))
+
+    def action_first(self):
+        if self.history.samples:
+            self.cursor = self.history.samples[0].index
+            self.viewport_start = self.cursor
+            self.redraw()
 
     def action_task(self, delta):
         lanes = self.history.lanes()
@@ -127,7 +163,13 @@ class KodamaCanvas(Static, can_focus=True):
             for part in (wrap_text(text, width=max(10, self.size.width), replace_whitespace=False) or ['']) if wrap else [text]:
                 out.append(part + '\n', style=style)
         samples = list(self.history.samples)
+        if self._capture != self.history.capture:
+            self.cursor = self.viewport_start = None
+            self._capture = self.history.capture
+        self.window_size = max(1, (self.size.width - self.lane_gutter - 2) // 2)
         if not samples:
+            self.visible_samples = []
+            self.window_start = 0
             line('KODAMA  ·  waiting for a scheduler snapshot', 'bold')
             line('No build-matched recorded samples yet; check ELF/session/path.' if self.target_status.startswith('RECORDED') else
                  'Enable the view at a halted target. Setup selects a signal header and optional API probes.')
@@ -135,9 +177,12 @@ class KodamaCanvas(Static, can_focus=True):
             if self.history.diagnostic:
                 line(self.history.diagnostic, colors['unknown'])
             self.update(out)
+            self.post_message(self.WindowChanged(self))
             return
         if self.cursor is not None and self.cursor < samples[0].index:
             self.cursor = samples[0].index
+        elif self.cursor is not None and self.cursor > samples[-1].index:
+            self.cursor = samples[-1].index
         current = next((s for s in samples if s.index == self.cursor), samples[-1])
         coverage = self.history.coverage
         recorded = self.target_status.startswith('RECORDED')
@@ -173,9 +218,18 @@ class KodamaCanvas(Static, can_focus=True):
         line('  Derived policy: MUST < MAY < IF_I_MUST → smaller priority → stable ties → yield deferral; cooperative' if policy else
              '  Derived basic policy: smaller numeric priority → stable slot ties; cooperative', 'dim')
         line('TASK LANES  ▶ running  ! interrupted  ◆ ready  ▒ waiting  z sleeping  ◇ parked  · free  × retired  ? unavailable', 'bold')
-        width = max(4, (self.size.width - self.lane_gutter - 2) // 2)
+        width = self.window_size
         position = samples.index(current)
-        start = max(0, min(position - width // 2, len(samples) - width))
+        if self.viewport_start is None:
+            start = max(0, min(position - width // 2, len(samples) - width))
+        else:
+            start = next((i for i, s in enumerate(samples) if s.index >= self.viewport_start), len(samples) - 1)
+            start = max(0, min(start, len(samples) - width))
+            start = max(0, min(start, position))
+            if position >= start + width:
+                start = position - width + 1
+            self.viewport_start = samples[start].index
+        self.window_start = start
         visible = self.visible_samples = samples[start:start + width]
         axis = ['  '] * len(visible)
         for i, s in enumerate(visible):
@@ -320,8 +374,39 @@ class KodamaCanvas(Static, can_focus=True):
         for note in notes[:5]:
             line('  ! ' + note, colors['unknown'])
         line('One cell = one observed sample; unequal spacing, not duration. Requests are not proof of success.', 'dim')
-        line('Click to inspect · ←/→ scrub · End live · ↑/↓ task · Ctrl+C copy selection/view', 'dim')
+        line('Drag history bar · PgUp/PgDn page · Home oldest · End live · ←/→ scrub · ↑/↓ task · Ctrl+C copy', 'dim')
         self.update(out)
+        self.post_message(self.WindowChanged(self))
+
+
+class KodamaHistoryBar(ScrollBar):
+    """Native draggable scrollbar, in two terminal columns per sample."""
+    DEFAULT_CSS = 'KodamaHistoryBar { height: 1; width: 1fr; }'
+
+    def __init__(self):
+        super().__init__(vertical=False)
+        self.tooltip = 'Drag to browse retained task and signal history; click the track to page. End follows live.'
+
+    class Seek(Message):
+        def __init__(self, position):
+            super().__init__()
+            self.position = position
+
+    def on_scroll_to(self, event: ScrollTo):
+        event.stop()
+        event.prevent_default()
+        if event.x is not None:
+            self.post_message(self.Seek(event.x / 2))
+
+    def on_scroll_left(self, event: ScrollLeft):
+        event.stop()
+        event.prevent_default()
+        self.post_message(self.Seek((self.position - self.window_size) / 2))
+
+    def on_scroll_right(self, event: ScrollRight):
+        event.stop()
+        event.prevent_default()
+        self.post_message(self.Seek((self.position + self.window_size) / 2))
 
 
 class KodamaPanel(Vertical):
@@ -330,6 +415,13 @@ class KodamaPanel(Vertical):
     KodamaPanel .kodama-controls { height: 3; }
     KodamaPanel Button { min-width: 10; width: auto; }
     KodamaPanel .kodama-scroll { height: 1fr; }
+    KodamaPanel .kodama-history-range { height: 1; color: $text-muted; }
+    KodamaPanel .kodama-history-track {
+        height: 1; padding-right: 2;
+        scrollbar-color: $accent; scrollbar-background: $boost;
+        scrollbar-color-hover: $text; scrollbar-color-active: $primary;
+    }
+    KodamaPanel .kodama-history-label { width: 32; height: 1; color: $text-muted; }
     '''
 
     def __init__(self, history, **kwargs):
@@ -344,8 +436,33 @@ class KodamaPanel(Vertical):
             yield Button('Setup', classes='kodama-setup')
             yield Button('Expand', classes='kodama-expand')
             yield Button('Copy', classes='kodama-copy')
+        yield Static('History · waiting for samples', classes='kodama-history-range')
+        with Horizontal(classes='kodama-history-track'):
+            yield Static('  History  ◀ older / newer ▶', classes='kodama-history-label')
+            yield KodamaHistoryBar()
         with VerticalScroll(classes='kodama-scroll'):
             yield KodamaCanvas(self.history)
+
+    def on_kodama_canvas_window_changed(self, event: KodamaCanvas.WindowChanged):
+        event.stop()
+        canvas = event.canvas
+        bar = self.query_one(KodamaHistoryBar)
+        samples = canvas.history.samples
+        bar.window_virtual_size = len(samples) * 2
+        bar.window_size = canvas.window_size * 2
+        bar.position = canvas.window_start * 2
+        bar.disabled = len(samples) <= canvas.window_size
+        if canvas.visible_samples:
+            first, last = canvas.visible_samples[0].index, canvas.visible_samples[-1].index
+            mode = 'Following newest' if canvas.cursor is None else 'Browsing history · End follows newest'
+            text = f'Samples {first}–{last} · retained {samples[0].index}–{samples[-1].index} · {mode}'
+        else:
+            text = 'History · waiting for samples'
+        self.query_one('.kodama-history-range', Static).update(text)
+
+    def on_kodama_history_bar_seek(self, event: KodamaHistoryBar.Seek):
+        event.stop()
+        self.query_one(KodamaCanvas).pan_history(event.position)
 
     def redraw(self, status, enabled):
         canvas = self.query_one(KodamaCanvas)

@@ -17,6 +17,9 @@ See [the schema, queries and real Kodama/QEMU demonstration](docs/OBSERVATIONS.m
 with task/signal timelines, decoded waits, priorities, scheduler decision boxes
 and coroutine-pool ownership. Click cells to inspect history; expand for a
 lesson view. Configure a signal header and optional API probes in **Kodama setup**.
+The **History** scrollbar pans task and signal lanes together while names stay
+fixed. Drag or use Page Up/Down; Home selects the oldest retained sample and End
+resumes following live activity. The visible/retained range is shown above it.
 Saved sessions can be viewed with `--kodama-history FILE` without starting GDB.
 See [the graphical guide and screenshot](docs/KODAMA_VIEW.md).
 
