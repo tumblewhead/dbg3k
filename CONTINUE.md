@@ -2,7 +2,7 @@
 
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/kodama-history-scrollbar` (based on PR #13)
-**Review:** draft PR pending, stacked on https://github.com/tumblewhead/dbg3k/pull/13
+**Review:** https://github.com/tumblewhead/dbg3k/pull/14 (draft, stacked on PR #13)
 **Current stage:** Shared horizontal history scrollbar for Kodama task/signal lanes. 95 tests:87 pass/8 opt-in skips; compileall/whitespace pass.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
@@ -30,8 +30,8 @@ capture reset. No GDB execution commands are sent by browsing. Full suite95 in
 PNGs visually inspected using explicitly illustrative fixture data, retained in
 /tmp/dbg3k-history-scrollbar-preview. GDB collector, firmware and physical hardware
 were not rerun/changed for this frontend update. User histories remain untouched.
-Receipt: handoff/kodama-scrollbar-validation.json. Next: publish/review the draft
-PR, check CI, pull this dbg3k branch and restart the existing venv application.
+Receipt: handoff/kodama-scrollbar-validation.json. Review PR#14; source bc7ea50 locally validated. Next: check CI, pull this
+dbg3k branch and restart the existing venv application.
 
 ### 2026-11-17: validated wiring import and explicit Boolean sensitivities
 
