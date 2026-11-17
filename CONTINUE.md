@@ -2,7 +2,7 @@
 
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/kodama-pool-color-key` (based on PR #15)
-**Review:** draft PR pending, stacked on https://github.com/tumblewhead/dbg3k/pull/15
+**Review:** https://github.com/tumblewhead/dbg3k/pull/16 (draft, stacked on PR #15)
 **Current stage:** Coroutine pool color key and explicit row states.101 tests:91 pass/10 opt-in skips; compileall/whitespace pass.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
@@ -24,7 +24,8 @@ Visually inspected true-color dark/light and80-column previews, explicitly
 illustrative fixture data, in /tmp/dbg3k-pool-key-preview. Ordinary tests also
 respect the environment's NO_COLOR setting. UI-only; no target/QEMU rerun or
 interactive-terminal claim. Receipt:handoff/kodama-pool-key-validation.json.
-Next: publish/review PR, check CI, pull this branch and restart dbg3k.
+Review PR#16; source6176ecc locally validated. Next: check CI, pull this branch
+and restart dbg3k.
 
 ### 2026-11-17: API capture resumes after budget exhaustion
 
