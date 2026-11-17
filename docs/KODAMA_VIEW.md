@@ -14,6 +14,10 @@ Horizontal spacing represents observation order, not elapsed time.
 
 ## Launch and navigate
 
+For continuous one-second repeats instead of a finite program exit, use the
+[live superloop example](../examples/kodama-live/README.md). It builds a separate
+live.elf and runs the real tasks with a QEMU SysTick timebase.
+
     dbg3k /path/to/demo.elf --kodama \
       --kodama-header /path/to/examples/c-main/task_config.hpp \
       --remote localhost:1234

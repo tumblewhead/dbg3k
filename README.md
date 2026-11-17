@@ -20,6 +20,10 @@ lesson view. Configure a signal header and optional API probes in **Kodama setup
 Saved sessions can be viewed with `--kodama-history FILE` without starting GDB.
 See [the graphical guide and screenshot](docs/KODAMA_VIEW.md).
 
+For a repeating lesson that stays alive under the debugger, see the
+[Kodama live superloop](examples/kodama-live/README.md). Its application-owned
+SysTick requests a new run every emulated second; main never returns.
+
 ## Getting started on Arch Linux
 
 Install Python 3.11+, make, arm-none-eabi-gcc, qemu-system-arm, GDB with ARM support.
