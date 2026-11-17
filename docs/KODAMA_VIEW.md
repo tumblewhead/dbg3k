@@ -39,6 +39,15 @@ explicitly NOT verified against the ELF. Keep source and build matched.
   count/last sample/tick through the cursor.
 - Left/Right scrub when the canvas has focus; Up/Down select tasks. End or
   Follow live follows the newest observed sample again.
+- The horizontal **History** scrollbar stays above the scrolling content and
+  pans task and signal lanes together. Drag its thumb or click its track to
+  page through retained samples. Task/signal names stay fixed on the left.
+  Page Up/Down page through history; Home selects the oldest retained sample.
+  The range label shows the visible and retained sample numbers. Browsing holds
+  the inspected window as new samples arrive; End or Follow live resumes following.
+  If the selected sample is evicted, inspection advances to the oldest retained
+  sample. The bar covers the existing512-sample UI retention, not all older
+  records in the JSONL journal. It is available in both normal and expanded views.
 - Expand opens a larger canvas; Esc closes it. Scroll vertically for more
   tasks, conditions, pool slots and diagnostics. Glyphs work without color;
   theme colors and the terminal's NO_COLOR preference are respected.

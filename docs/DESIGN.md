@@ -92,6 +92,12 @@ firmware or advancing visible stop IDs. Raw events stay in the same journal;
 offline replay requires matching ELF/session identity. See
 [KODAMA_VIEW.md](KODAMA_VIEW.md) for contracts and limitations.
 
+The Kodama history scrollbar controls a shared horizontal viewport for task and
+signal lanes with fixed names. Browsing anchors absolute sample identities as
+live data arrives; evicted selections clamp to retained history. It never sends
+debugger commands. The visible/retained range and Follow live control keep
+navigation separate from execution and the existing bounded capture/retention.
+
 - GDB/MI: source, frames, locals, breakpoints, registers, halt and exception events.
 - QEMU plugin (later): executed instruction and optionally SP/call trace with low overhead.
 - Scope model: identifiers, histories, attribution and provenance.

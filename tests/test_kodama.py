@@ -8,7 +8,7 @@ from unittest.mock import Mock
 from dbg3k.app import DebuggerApp
 from dbg3k.kodama_model import KodamaHistory, KodamaJournal, decode_sample
 from dbg3k.kodama_symbols import signal_labels
-from dbg3k.kodama_ui import KodamaCanvas, KodamaScreen, KodamaSetup, event_arguments
+from dbg3k.kodama_ui import KodamaCanvas, KodamaHistoryBar, KodamaScreen, KodamaSetup, event_arguments
 
 
 def node(value, pointer=False):
@@ -185,6 +185,112 @@ class KodamaWidgetTests(unittest.IsolatedAsyncioTestCase):
         app._send = lambda *a, **kw: None
         app.kodama_history = history()
         return app
+
+    async def test_history_scrollbar_drag_page_alignment_and_live_arrivals(self):
+        app = self.app()
+        for sequence in range(3, 601):
+            app.kodama_history.accept(sample(sequence))
+        async with app.run_test(size=(140, 55)) as pilot:
+            app.set_visible_views({'kodama'})
+            app._show_kodama()
+            await pilot.pause()
+            canvas = app.query_one(KodamaCanvas)
+            bar = app.query_one(KodamaHistoryBar)
+            self.assertTrue(bar.visible)
+            self.assertFalse(bar.disabled)
+            self.assertEqual(canvas.visible_samples[-1].index, 600)
+            newest_start = canvas.visible_samples[0].index
+            # A native track click pages, rather than moving one cell at a time.
+            await pilot.click(bar, offset=(0, 0))
+            await pilot.pause()
+            self.assertLess(canvas.visible_samples[0].index, newest_start)
+            self.assertIsNotNone(canvas.cursor)
+            canvas.focus()
+            await pilot.press('home')
+            self.assertEqual(canvas.cursor, app.kodama_history.samples[0].index)
+            self.assertEqual(bar.position, 0)
+            # Drag the actual native thumb through mouse capture.
+            await pilot.mouse_down(bar, offset=(1, 0))
+            self.assertIsNotNone(bar.grabbed)
+            await pilot.hover(bar, offset=(bar.size.width // 2, 0))
+            await pilot.mouse_up(bar, offset=(bar.size.width // 2, 0))
+            await pilot.pause()
+            self.assertGreater(canvas.window_start, 100)
+            self.assertEqual(canvas.parent.scroll_x, 0)  # Lane names stay fixed.
+            first = canvas.visible_samples[0].index
+            signal_row = next(y for y, signal in canvas.signal_hits.items() if signal['name'] == 'A')
+            target = canvas.visible_samples[5].index
+            await pilot.click(canvas, offset=(canvas.lane_gutter + 10, signal_row))
+            self.assertEqual(canvas.cursor, target)
+            self.assertEqual(canvas.selected_signal['name'], 'A')
+            self.assertEqual(canvas.visible_samples[0].index, first)
+            task_row = next(iter(canvas.hits))
+            target = canvas.visible_samples[7].index
+            await pilot.click(canvas, offset=(canvas.lane_gutter + 14, task_row))
+            self.assertEqual(canvas.cursor, target)
+            # New samples evict the oldest retained entries without shifting our
+            # absolute sample window or resuming live mode.
+            for sequence in range(601, 611):
+                app.kodama_history.accept(sample(sequence))
+            app._show_kodama()
+            await pilot.pause()
+            self.assertEqual(canvas.cursor, target)
+            self.assertEqual(canvas.visible_samples[0].index, first)
+            self.assertEqual(bar.position, canvas.window_start * 2)
+            app._send = Mock()
+            await pilot.click('.kodama-live')
+            self.assertIsNone(canvas.cursor)
+            self.assertEqual(canvas.visible_samples[-1].index, 610)
+            app._send.assert_not_called()  # History browsing never runs GDB.
+
+    async def test_history_scrollbar_expanded_resize_eviction_and_capture_reset(self):
+        app = self.app()
+        app.kodama_history = KodamaHistory(limit=60)
+        app.kodama_history.reset('fixture')
+        async with app.run_test(size=(110, 46)) as pilot:
+            app.set_visible_views({'kodama'})
+            app._show_kodama()
+            await pilot.pause()
+            self.assertTrue(app.query_one(KodamaHistoryBar).disabled)
+            for sequence in range(1, 81):
+                app.kodama_history.accept(sample(sequence))
+            app._show_kodama()
+            await pilot.click('.kodama-expand')
+            await pilot.pause()
+            canvas = app.screen.query_one(KodamaCanvas)
+            bar = app.screen.query_one(KodamaHistoryBar)
+            canvas.focus()
+            await pilot.press('home')
+            self.assertEqual(canvas.cursor, 21)
+            await pilot.press('pagedown')
+            self.assertGreater(canvas.window_start, 0)
+            await pilot.press('pageup')
+            self.assertEqual(canvas.window_start, 0)
+            for sequence in range(81, 151):
+                app.kodama_history.accept(sample(sequence))
+            app._show_kodama()
+            await pilot.pause()
+            self.assertEqual(canvas.cursor, 91)
+            self.assertEqual(canvas.visible_samples[0].index, 91)
+            self.assertEqual(bar.position, 0)
+            await pilot.resize_terminal(80, 40)
+            await pilot.pause()
+            self.assertEqual(canvas.cursor, 91)
+            self.assertEqual(bar.window_size, canvas.window_size * 2)
+            bar_y = bar.region.y
+            canvas.parent.scroll_end(animate=False)
+            await pilot.pause()
+            self.assertEqual(bar.region.y, bar_y)  # Control stays above vertical content.
+            await pilot.press('end')
+            self.assertIsNone(canvas.cursor)
+            self.assertEqual(canvas.visible_samples[-1].index, 150)
+            app.kodama_history.reset('new-capture')
+            app.kodama_history.accept(sample(1, capture='new-capture'))
+            app._show_kodama()
+            await pilot.pause()
+            self.assertEqual(canvas.visible_samples[0].index, 1)
+            self.assertEqual(bar.position, 0)
+            self.assertTrue(bar.disabled)
 
     async def test_level_requests_keep_api_marker_and_observed_waveform_separate(self):
         app = self.app()

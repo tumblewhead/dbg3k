@@ -1,13 +1,37 @@
 # dbg3k: development history and continuation
 
 **Repository:** https://github.com/tumblewhead/dbg3k
-**Working branch:** `feature/kodama-wiring-import` (based on PR #12)
-**Review:** https://github.com/tumblewhead/dbg3k/pull/13 (draft, stacked on PR #12)
-**Current stage:** Offline Miro JSON → YAML importer with bounded AND/OR grammar and strict bidirectional producer/consumer checks. 93 tests:85 pass/8 opt-in skips; compileall/whitespace pass.
+**Working branch:** `feature/kodama-history-scrollbar` (based on PR #13)
+**Review:** https://github.com/tumblewhead/dbg3k/pull/14 (draft, stacked on PR #13)
+**Current stage:** Shared horizontal history scrollbar for Kodama task/signal lanes. 95 tests:87 pass/8 opt-in skips; compileall/whitespace pass.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
+
+### 2026-11-17: draggable Kodama history scrollbar
+
+User needs fast navigation through rapidly accumulated task/signal observations.
+Added a native horizontal scrollbar, pinned above vertically scrolling content,
+which pans both lane groups together while names stay fixed. Visible/retained
+sample ranges are explicit. Drag the thumb or click its track to page; canvas
+Page Up/Down page, Home selects oldest and End/Follow live resumes following.
+Browsing anchors an absolute sample window while incoming data continues; if
+its selected sample is evicted, clamp to the oldest retained sample. Resizing,
+empty/short captures and capture restart update the range/thumb. Normal and
+expanded panes both provide the control. UI retention remains512; older JSONL
+records are not silently represented as scrollable live history.
+
+Two headless interaction tests exercise actual thumb dragging, track clicks,
+task/signal hit alignment after pan, fixed labels, incoming appends/evictions,
+frozen inspection, live resumption, expanded paging, resize, pinned controls and
+capture reset. No GDB execution commands are sent by browsing. Full suite95 in
+22.503s:87 pass/8 opt-in skips; compileall and whitespace pass. Dark/light preview
+PNGs visually inspected using explicitly illustrative fixture data, retained in
+/tmp/dbg3k-history-scrollbar-preview. GDB collector, firmware and physical hardware
+were not rerun/changed for this frontend update. User histories remain untouched.
+Receipt: handoff/kodama-scrollbar-validation.json. Review PR#14; source bc7ea50 locally validated. Next: check CI, pull this
+dbg3k branch and restart the existing venv application.
 
 ### 2026-11-17: validated wiring import and explicit Boolean sensitivities
 
