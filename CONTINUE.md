@@ -1,13 +1,48 @@
 # dbg3k: development history and continuation
 
 **Repository:** https://github.com/tumblewhead/dbg3k
-**Working branch:** `feature/kodama-pool-color-key` (based on PR #15)
-**Review:** https://github.com/tumblewhead/dbg3k/pull/16 (draft, stacked on PR #15)
-**Current stage:** Coroutine pool color key and explicit row states.101 tests:91 pass/10 opt-in skips; compileall/whitespace pass.
+**Working branch:** `feature/kodama-demo-handoff` (based on PR #16)
+**Review:** draft https://github.com/tumblewhead/dbg3k/pull/17, stacked on PR #16
+**Current stage:** Complete demo operator guide, printable HTML and plugin-enabled paired launcher.103 tests:92 pass/11 opt-in skips; real workshop/plugin checks pass; compileall/whitespace pass.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
+
+### 2026-11-17: operator handoff and plugin-enabled demo launch
+
+User requests a transferable document with all UI/GDB steps and notices the
+demo starts without the counting plugin. Added docs/KODAMA_DEMO_HANDOFF.md:
+existing worktree/fresh clone setup, dependencies/venv, both terminals, exact
+breakpoint/inspection sequences, palette/views, overview and short API trace,
+pool colors, history navigation/gaps, stack/instruction/energy panes, observation
+capture, copy/export/replay, scripted CLI, troubleshooting and one-hour agenda.
+Printable self-contained HTML:build/kodama-demo-handoff.html (local shareable
+artifact; browser Print/Save as PDF). Internal links checked. Source guide is
+canonical; branch/install commands are explicit and do not touch original S2.
+
+New examples/kodama-demo/run.py builds the real firmware and matching plugin,
+starts the proven paused SRAM loader, and prints an absolute dbg3k command with
+matching ELF/header/profile. Each launch uses a unique run directory and records
+launch.json/ELF hash, counts and local history. Profiling defaults ON; API probes
+default OFF for the overview, with an explicit opt-in flag and UI instructions
+for short traces. --no-profile is the lighter option. Counting avoids GDB
+instruction stepping but adds QEMU instrumentation overhead, not acceleration;
+QEMU official plugin docs and actual C source support the guide's explanation.
+
+Validation:103 ordinary checks in23.354s:92 pass/11 opt-in skips; compileall and
+whitespace pass. Launcher test covers quoted paths, matching profile/ELF arguments,
+unique run files and mode flags. Actual full-build dry run succeeds. Real QEMU
+workshop check passes in9.412s:exact guide commands reach main/1s/6s, init mask1022,
+failed0, HFE count1000, plugin-matched ELF/HFE attribution, instruction+energy rows,
+structured observations and14 short API samples. Separate real plugin oracle
+passes26 loop dispatches. Retained failures:initial sandbox socket denial;
+test's GDB true/int parsing corrected. Existing user histories remain untouched.
+Receipt:handoff/kodama-demo-handoff-validation.json; local evidence in
+/tmp/dbg3k-workshop-receipt. No measured-power, physical hardware, full-hour QEMU
+or interactive-terminal qualification. Published as draft PR #17; source commit
+1a092e4ba86e42e986f114a650785cb217cd7272. No Actions runs returned at initial
+publication check. Next:review PR/check CI and share the guide.
 
 ### 2026-11-17: explain coroutine pool colors
 

@@ -100,6 +100,11 @@ instruction profiles are required.
 
 ## Start QEMU with instruction counting
 
+For the continuous diagram-demo application, the [handoff guide](KODAMA_DEMO_HANDOFF.md)
+and `examples/kodama-demo/run.py` pair QEMU, plugin and dbg3k automatically.
+The plugin provides efficient instruction instrumentation; it is not an emulator
+accelerator and does not replace scheduler API probes.
+
 Requirements: a plugin-enabled QEMU system emulator, C compiler, `pkg-config`,
 GLib development headers and the **matching QEMU public `qemu-plugin.h`**.
 The header is often `/usr/include/qemu-plugin.h`. If it is missing, get it from
@@ -228,5 +233,7 @@ Set `DBG3K_GDB=gdb-multiarch` as needed. The assembly oracle executes a five-ite
 loop twice: 13 dispatches per call, 26 total, 10 ELF body bytes. An uncalled
 4-byte function counts zero. The mounted Textual/GDB/QEMU test checks actual
 stack snapshots, ELF mapping and live plugin ingestion while retaining return
-observations. This is AN505 M33 emulator evidence; physical M23, ISR-stack and
-current Kodama-specific profiling remain unqualified.
+observations. This is AN505 M33 emulator evidence; physical M23 and ISR-stack
+qualification remain unavailable. The [handoff guide](KODAMA_DEMO_HANDOFF.md)
+and its receipt separately qualify the diagram demo's paired plugin/profile,
+HFE code attribution and mounted ranking views; they do not claim per-task counts.
