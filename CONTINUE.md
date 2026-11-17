@@ -1,13 +1,50 @@
 # dbg3k: development history and continuation
 
 **Repository:** https://github.com/tumblewhead/dbg3k
-**Working branch:** `feature/kodama-history-scrollbar` (based on PR #13)
-**Review:** https://github.com/tumblewhead/dbg3k/pull/14 (draft, stacked on PR #13)
-**Current stage:** Shared horizontal history scrollbar for Kodama task/signal lanes. 95 tests:87 pass/8 opt-in skips; compileall/whitespace pass.
+**Working branch:** `fix/kodama-capture-rearm` (based on PR #14)
+**Review:** https://github.com/tumblewhead/dbg3k/pull/15 (draft, stacked on PR #14)
+**Current stage:** Re-arm bounded API capture at each visible stop; preserve fresh snapshots and explicit capture gaps.101 tests:91 pass/10 opt-in skips; five real QEMU checks pass; compileall/whitespace pass.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
+
+### 2026-11-17: API capture resumes after budget exhaustion
+
+User sees no new task/signal activity on the second continue. Read-only tail
+inspection of the local journal confirms sequence4096 and the old session-wide
+limit diagnostic. Replaced that lifetime cap with4096 API samples per interval
+between visible stops. Every enabled visible stop emits a current snapshot and
+re-arms the next interval without changing capture ID or resetting sample IDs.
+Duplicate same-stop refreshes cannot refill the budget; paused capture stays
+paused. Exhausted probes skip argument/frame/state reads, although installed
+breakpoint traps still have overhead. No hidden interrupts or execution added.
+
+Coverage carries budget scope/usage/exhaustion. A prominent banner identifies
+exhaustion during a run. The following snapshot retains a capture_gap with
+preceding stop, cutoff sequence and counted probe entries without state reads;
+the timeline shows a separate gap row/legend without overwriting axis numbers.
+Missing scheduler transitions are never reconstructed. Journal replay retains
+gaps, and only the budget-specific diagnostic clears when re-armed. UI retention
+remains512; JSONL appends across intervals. Per-run quotas do not bound total
+session-file size. Existing source/capture histories remain untouched.
+
+Validation:101 ordinary checks in23.317s:91 pass/10 opt-in skips. Five actual
+QEMU/GDB checks pass in10.343s: old/current identity layouts, public collector
+fixture, real continuous demo second-continue and public budget fixture. Budget
+target tests use16 API samples/run to force exhaustion; unit tests exercise the
+production4096 budget across two intervals. Real demo emits fresh stop snapshots,
+16 API entries in each run, two gaps and monotonic sample IDs in one capture;
+observed checkpoints are1000 ticks apart with an actual startup offset.
+
+Retained failed attempts: sandbox socket denial; slow icount/probe combination
+replaced by the launcher's normal QEMU clock; GDB rejected deferred breakpoint
+disable while running, so that approach was removed; test's zero-start clock
+assumption corrected; gap marker/long numeric axis overlap fixed with its own
+row. No physical/terminal qualification. Receipt:
+handoff/kodama-capture-rearm-validation.json; local evidence/preview in
+/tmp/dbg3k-budget-receipt. Review PR#15; source7ed740c locally validated. Next: check CI, pull this branch
+and restart dbg3k; continue twice and use End to follow new activity.
 
 ### 2026-11-17: draggable Kodama history scrollbar
 

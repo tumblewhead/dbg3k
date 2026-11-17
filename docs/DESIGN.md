@@ -98,6 +98,13 @@ live data arrives; evicted selections clamp to retained history. It never sends
 debugger commands. The visible/retained range and Follow live control keep
 navigation separate from execution and the existing bounded capture/retention.
 
+Kodama API reads are bounded per interval between visible debugger stops.
+Stop snapshots bypass that budget and re-arm the following interval without
+resetting capture IDs or sample sequences. Exhaustion is explicit coverage data;
+the next snapshot retains the omitted interval as a capture gap. These gaps do
+not reconstruct unobserved scheduler transitions. Same-stop refreshes cannot
+silently refill the budget. Pausing capture remains an explicit user choice.
+
 - GDB/MI: source, frames, locals, breakpoints, registers, halt and exception events.
 - QEMU plugin (later): executed instruction and optionally SP/call trace with low overhead.
 - Scope model: identifiers, histories, attribution and provenance.
