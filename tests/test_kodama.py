@@ -58,6 +58,26 @@ def history():
 
 
 class KodamaModelTests(unittest.TestCase):
+    def test_budget_rearm_clears_only_budget_diagnostic_and_preserves_gap_in_replay(self):
+        h = history()
+        h.accept(dict(capture='fixture', diagnostic='budget used', diagnostic_code='api-budget'))
+        rearmed = dict(capture='fixture', coverage=dict(api_budget=dict(exhausted=False)))
+        self.assertTrue(h.accept(rearmed))
+        self.assertEqual(h.diagnostic, '')
+        h.accept(dict(capture='fixture', diagnostic='memory read failure'))
+        h.accept(rearmed)
+        self.assertEqual(h.diagnostic, 'memory read failure')
+        data = sample(3)
+        data['capture_gap'] = dict(reason='api-budget', preceding_stop=2, skipped_probe_entries=50)
+        self.assertTrue(h.accept(data))
+        self.assertIn('50 probe entries without state snapshots', h.samples[-1].notes[0])
+        replay = KodamaHistory()
+        journal = KodamaJournal('hash', replay)
+        for seq, kind, fields in [(1, 'session_start', dict(elf_sha256='hash')),
+                                  (2, 'kodama_sample', dict(data=data))]:
+            journal.apply(dict(schema='dbg3k.trace.v1', session='session', seq=seq, kind=kind, **fields))
+        self.assertEqual(replay.samples[-1].capture_gap, data['capture_gap'])
+
     def test_event_aliases_require_unique_live_binding(self):
         h = history()
         data = sample()
@@ -185,6 +205,30 @@ class KodamaWidgetTests(unittest.IsolatedAsyncioTestCase):
         app._send = lambda *a, **kw: None
         app.kodama_history = history()
         return app
+
+    async def test_api_budget_exhaustion_is_prominent_and_next_stop_marks_gap(self):
+        app = self.app()
+        h = app.kodama_history
+        h.accept(dict(capture='fixture', coverage=dict(probes=True, api_budget=dict(limit=4096, exhausted=True))))
+        async with app.run_test(size=(140, 55)) as pilot:
+            app.set_visible_views({'kodama'}); app._show_kodama(); await pilot.pause()
+            canvas = app.query_one(KodamaCanvas)
+            self.assertIn('API CAPTURE GAP', str(canvas.render()))
+            h.accept(dict(capture='fixture', coverage=dict(probes=True, api_budget=dict(limit=4096, exhausted=False))))
+            data = sample(3)
+            data['capture_gap'] = dict(reason='api-budget', preceding_stop=2, skipped_probe_entries=10)
+            h.accept(data)
+            app._show_kodama(); await pilot.pause()
+            text = str(canvas.render())
+            self.assertNotIn('API CAPTURE GAP', text)
+            self.assertIn('⋮ capture gap', text)
+            self.assertIn('10 probe entries without state snapshots', text)
+            # Continued captures can exceed four-digit sample IDs.
+            for observed in h.samples:
+                observed.index += 10000
+            canvas.redraw()
+            axis = next(line for line in str(canvas.render()).splitlines() if line.startswith('sample #'))
+            self.assertIn('10001', axis)
 
     async def test_history_scrollbar_drag_page_alignment_and_live_arrivals(self):
         app = self.app()

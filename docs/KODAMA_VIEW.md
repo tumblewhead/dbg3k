@@ -58,6 +58,20 @@ pending changes. Hiding the pane leaves collection running. --no-kodama disables
 automatic startup; --kodama-no-probes collects only manual-stop snapshots.
 General Observation capture remains independent.
 
+API capture automatically re-arms at each new visible debugger stop. Its4096
+sample budget applies to the next run interval; it no longer stops collection
+for the rest of the session. Visible-stop snapshots are always collected while
+capture is enabled, even after the preceding run exhausted its API budget.
+Refreshing the same stopped frame does not refill that budget. Pause capture
+still stays paused until explicitly enabled.
+
+If a run fills its budget, **API CAPTURE GAP** appears near the top of the pane.
+Further probe entries skip argument/state reads until the next visible stop,
+which supplies a fresh snapshot and marks the omitted interval with **⋮** on
+the sample axis. Inspect that snapshot for the number of probe entries without
+state snapshots. That count is not a count of task switches or target events.
+Using shorter run intervals can capture a more complete section of interest.
+
 ## Read the graphics
 
 Lanes show running, interrupted, ready, waiting, sleeping, parked, free, retired
@@ -139,15 +153,24 @@ and allocator diagnostics remain observed data. Derived state labels, conditions
 policy explanations and ownership interpretation live in the independent model.
 Read errors/unknowns never become successful zeros. See [TRACE_JSONL.md](TRACE_JSONL.md).
 
-Bounds: 32 tasks, 64 pool slots, 16 alternatives/subscription, 4096 samples/capture,
+Bounds: 32 tasks, 64 pool slots, 16 alternatives/subscription,4096 API samples/run interval,
 128 KiB/sample. The UI retains 512 samples and at most 128 lifetime lanes,
 preserving current slots; the journal retains earlier evidence. Headers are
 bounded to128 KiB/64 labels/80-character names. Replay consumes bounded batches.
-Truncation and failures are explicit. The sample cap stops reads/recording,
-not already installed probe traps: pause/restart at a debugger stop to remove or
-rearm them. Host breakpoints/reads add overhead and can affect interleavings.
+Truncation and failures are explicit. The API budget stops argument/state reads
+and API recording for that run, not already installed probe traps. Pause at a
+halted stop to remove them; new visible stops automatically re-arm enabled
+capture. Host breakpoints/reads add overhead and can affect interleavings.
 No firmware instrumentation or target calls are added. API-entry coverage is
 narrower than continuous tracing.
+
+Additive raw fields preserve `dbg3k.trace.v1` reader compatibility:
+`coverage.api_budget` records scope (`between-visible-stops`), limit, used count,
+exhaustion and preceding stop. A subsequent stop sample's `capture_gap` records
+reason (`api-budget`), preceding_stop, after_sample_seq, skipped_probe_entries
+and api_limit. Sample sequence IDs continue monotonically within the same
+capture; re-arming does not reset history or task identity. JSONL keeps appending
+across intervals, so the per-run bound is not a total session-file size bound.
 
 ## Reproduce qualification
 

@@ -74,6 +74,7 @@ class Sample:
     candidates: list[str] = field(default_factory=list)
     predicted: str | None = None
     decision: str = ''
+    capture_gap: dict | None = None
 
 
 def _friendly(symbol, fallback):
@@ -86,6 +87,13 @@ def decode_sample(data, index):
     raw = data.get('state', {})
     core = {k: integer(v) for k, v in raw.get('core', {}).items()}
     notes = list(raw.get('errors', []))
+    gap = data.get('capture_gap')
+    if isinstance(gap, dict) and gap.get('reason') == 'api-budget':
+        count = gap.get('skipped_probe_entries')
+        missing = (f'{count} probe entries without state snapshots' if type(count) is int else
+                   'omitted probe entry count unknown')
+        notes.append(f'API capture gap after stop {gap.get("preceding_stop", "?")}: '
+                     f'{missing}. Intermediate transitions are unavailable.')
     tasks = []
     for item in raw.get('tasks', []):
         slot, f = item['index'], item.get('fields', {})
@@ -152,6 +160,7 @@ def decode_sample(data, index):
             notes.append(f'Pool {item["index"]}: ambiguous binding ownership')
     sample = Sample(index, data['sample_seq'], data['stop'], core.get('clock_ticks'),
         data['origin'], data.get('thread'), data.get('frame', {}), core, tasks, pool, raw, data.get('event'), notes)
+    sample.capture_gap = gap if isinstance(gap, dict) else None
     _decision(sample)
     return sample
 
@@ -230,6 +239,7 @@ class KodamaHistory:
         self.evicted = 0
         self.coverage = {}
         self.diagnostic = ''
+        self.diagnostic_code = None
         self.labels = dict(signals=[], status='Signal names unavailable')
         self.names = {}
         self.epoch = 0
@@ -241,6 +251,7 @@ class KodamaHistory:
         self.capture, self.last_sequence = capture, 0
         self.total, self.evicted = 0, 0
         self.coverage, self.diagnostic = {}, ''
+        self.diagnostic_code = None
         self.names.clear()
         self.epoch = 0
         self.generations.clear()
@@ -250,9 +261,13 @@ class KodamaHistory:
             return False
         if 'coverage' in data:
             self.coverage = data['coverage']
+            budget = self.coverage.get('api_budget', {})
+            if budget and not budget.get('exhausted') and self.diagnostic_code == 'api-budget':
+                self.diagnostic, self.diagnostic_code = '', None
             return True
         if 'diagnostic' in data:
             self.diagnostic = data['diagnostic']
+            self.diagnostic_code = data.get('diagnostic_code')
             return True
         if data.get('schema') != 'dbg3k.kodama.raw.v1':
             return False

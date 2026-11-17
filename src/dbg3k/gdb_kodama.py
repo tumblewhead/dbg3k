@@ -104,7 +104,8 @@ def subscription(task, values):
 
 def snapshot():
     result = dict(core={}, tasks=[], commands=[], pool=[], errors=[], limits=dict(
-        tasks=TASK_LIMIT, pool=POOL_LIMIT, alternatives=ALTERNATIVE_LIMIT, api_events=EVENT_LIMIT))
+        tasks=TASK_LIMIT, pool=POOL_LIMIT, alternatives=ALTERNATIVE_LIMIT, api_events=EVENT_LIMIT,
+        api_event_scope='between-visible-stops'))
     result['allocator'] = {name: global_scalar(name) for name in
         ('g_allocations', 'g_frees', 'g_live', 'g_peak', 'g_failed_alloc', 'g_frame_max')}
     for name in ('running', 'levels', 'urgent_levels', 'clock_ticks', 'yield_skip', 'order_head', 'destroying'):
@@ -192,7 +193,7 @@ class ApiProbe(gdb.Breakpoint):
         self.owner, self.logical = owner, logical
 
     def stop(self):
-        if not self.owner.enabled:
+        if not self.owner.enabled or not self.owner.allow_api():
             return False
         try:
             frame = gdb.newest_frame()
@@ -224,16 +225,54 @@ class KodamaObserver:
         self.anchor = 0
         self.capture = ''
         self.limited = False
+        self.api_count = 0
+        self.skipped_api = 0
+        self.budget_stop = None
+        self.probes_requested = False
+        self.unavailable = []
 
-    def emit_error(self, message):
-        gdb.write(PREFIX + json.dumps(dict(capture=self.capture, diagnostic=message[:500])) + '\n')
+    def emit_error(self, message, code=None):
+        gdb.write(PREFIX + json.dumps(dict(capture=self.capture, diagnostic=message[:500],
+                                          diagnostic_code=code)) + '\n')
 
-    def emit(self, origin, stop, event=None):
-        if self.sequence >= EVENT_LIMIT:
+    def emit_coverage(self):
+        gdb.write(PREFIX + json.dumps(dict(capture=self.capture, coverage=dict(
+            enabled=self.enabled, probes=self.probes_requested,
+            installed=[p.logical for p in self.probes], unavailable=self.unavailable,
+            api_budget=dict(scope='between-visible-stops', limit=EVENT_LIMIT,
+                            used=self.api_count, exhausted=self.limited, stop=self.budget_stop)))) + '\n')
+
+    def allow_api(self):
+        if self.api_count >= EVENT_LIMIT:
+            self.skipped_api += 1
             if not self.limited:
                 self.limited = True
-                self.emit_error('4096 sample limit reached; pause/restart capture at a debugger stop')
-            return
+                self.emit_coverage()
+                self.emit_error(f'{EVENT_LIMIT} API samples captured for this run; remaining activity is not '
+                                'snapshotted until the next debugger stop. Capture automatically re-arms there.',
+                                code='api-budget')
+            return False
+        return True
+
+    def begin_stop(self, stop):
+        gap = None
+        if self.budget_stop != stop:
+            if self.limited:
+                gap = dict(reason='api-budget', preceding_stop=self.budget_stop,
+                           after_sample_seq=self.sequence, skipped_probe_entries=self.skipped_api,
+                           api_limit=EVENT_LIMIT)
+            self.api_count, self.skipped_api, self.limited = 0, 0, False
+            self.budget_stop = stop
+            self.emit_coverage()
+        self.anchor = stop
+        return gap
+
+    def emit(self, origin, stop, event=None, capture_gap=None):
+        # A run's API budget must never suppress the next visible-stop snapshot.
+        if origin == 'api':
+            if not self.allow_api():
+                return
+            self.api_count += 1
         self.sequence += 1
         thread = gdb.selected_thread()
         frame = gdb.newest_frame()
@@ -248,6 +287,8 @@ class KodamaObserver:
             frame=dict(function=frame.name(), pc=hex(frame.pc()), filename=sal.symtab.fullname() if sal.symtab else None,
                        line=sal.line, exception=exception),
             event=event, state=snapshot())
+        if capture_gap:
+            data['capture_gap'] = capture_gap
         encoded = json.dumps(data, separators=(',', ':'))
         # Keep complete objects within the same bounded journal contract.
         while len(encoded.encode()) > RECORD_LIMIT - 2048 and data['state']['tasks']:
@@ -265,17 +306,18 @@ class KodamaObserver:
         self.probes = []
         if self.capture != capture:
             self.sequence, self.limited = 0, False
+            self.api_count, self.skipped_api, self.budget_stop = 0, 0, None
         self.capture, self.anchor = capture, anchor
         self.enabled = enabled
-        unavailable = []
+        self.probes_requested = probes
+        self.unavailable = []
         if enabled and probes:
             for logical, spec in symbols[:24]:
                 try:
                     self.probes.append(ApiProbe(self, logical, spec))
                 except (gdb.error, TypeError) as exc:
-                    unavailable.append(logical + ': ' + str(exc)[:120])
-        gdb.write(PREFIX + json.dumps(dict(capture=capture, coverage=dict(enabled=enabled,
-            probes=probes, installed=[p.logical for p in self.probes], unavailable=unavailable))) + '\n')
+                    self.unavailable.append(logical + ': ' + str(exc)[:120])
+        self.emit_coverage()
 
 
 _observer = KodamaObserver()
@@ -286,6 +328,6 @@ def dbg3k_kodama_control(enabled, probes, capture, anchor, symbols):
 
 
 def dbg3k_kodama_snapshot(stop):
-    _observer.anchor = stop
     if _observer.enabled:
-        _observer.emit('stop', stop)
+        gap = _observer.begin_stop(stop)
+        _observer.emit('stop', stop, capture_gap=gap)

@@ -190,6 +190,10 @@ class KodamaCanvas(Static, can_focus=True):
         line(f'KODAMA  {mode}  │  sample {current.index}  stop {current.stop}  tick {current.tick if current.tick is not None else "?"}  │  {self.target_status}', 'bold')
         line(f'{"Recorded capture" if recorded else "Capture ON" if self.capture_enabled else "Capture PAUSED"} · API probes {"ON" if coverage.get("probes") else "OFF"} '
              f'({len(coverage.get("installed", []))} installed) · {self.history.evicted} older samples evicted', 'dim')
+        budget = coverage.get('api_budget', {})
+        if budget.get('exhausted'):
+            line(f'API CAPTURE GAP · {budget.get("limit", "?")} samples used for this run · '
+                 'fresh snapshot and automatic re-arm at the next debugger stop', colors['waiting'], wrap=True)
         active = sum(t.active is True for t in current.tasks)
         ready = sum(t.active is True and val(t.fields, 'ready') == 1 for t in current.tasks)
         running = next((t for t in current.tasks if t.state in ('running', 'interrupted')), None)
@@ -235,11 +239,15 @@ class KodamaCanvas(Static, can_focus=True):
         for i, s in enumerate(visible):
             if i % 5 == 0:
                 label = str(s.index)
-                for j, char in enumerate(label[:4]):
+                for j, char in enumerate(label):
                     at, part = divmod(i * 2 + j, 2)
                     if at < len(axis):
                         chars = list(axis[at]); chars[part] = char; axis[at] = ''.join(chars)
         line('sample #'.ljust(self.lane_gutter) + ''.join(axis), 'dim')
+        if any(s.capture_gap for s in visible):
+            line('capture gaps'.ljust(self.lane_gutter) +
+                 ''.join('⋮ ' if s.capture_gap else '  ' for s in visible), colors['waiting'])
+            line('  ⋮ capture gap before this snapshot; intermediate activity was not recorded', colors['waiting'])
         lanes = self.history.lanes()
         if (self.selected is None or not self.selection_pinned) and lanes:
             self.selected = next((t.key for t in current.tasks if t.state == 'running'),

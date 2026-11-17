@@ -20,6 +20,8 @@ lesson view. Configure a signal header and optional API probes in **Kodama setup
 The **History** scrollbar pans task and signal lanes together while names stay
 fixed. Drag or use Page Up/Down; Home selects the oldest retained sample and End
 resumes following live activity. The visible/retained range is shown above it.
+API capture re-arms at each debugger stop; a4096-sample run budget and explicit
+gap markers keep a long first continue from disabling all subsequent activity.
 Saved sessions can be viewed with `--kodama-history FILE` without starting GDB.
 See [the graphical guide and screenshot](docs/KODAMA_VIEW.md).
 
