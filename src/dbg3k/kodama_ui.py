@@ -11,10 +11,29 @@ from .kodama_model import integer, val
 GLYPHS = dict(running='▶', interrupted='!', ready='◆', waiting='▒', sleeping='z', free='·', retired='×', parked='◇', unknown='?')
 
 
+def event_arguments(sample, history):
+    """Resolve only unique, live bindings from this sample; retain raw addresses."""
+    result = []
+    for key, value in (sample.event or {}).get('arguments', {}).items():
+        raw = value.get('value') or '?'
+        address = integer(value)
+        matches = [task for task in sample.tasks if task.active is True and address not in (None, 0)
+                   and ((key == 'context' and val(task.fields, 'context') == address)
+                        or (key == 'sub' and val(task.fields, 'subscription') == address))]
+        if len(matches) == 1:
+            task = matches[0]
+            alias = f'{task.name} [{task.key}]'
+            if key == 'sub':
+                alias += ': ' + history.wait_text(task, sample)
+            raw = f'{alias} ({raw})'
+        result.append(f'{key}={raw}')
+    return ', '.join(result)
+
+
 class KodamaCanvas(Static, can_focus=True):
     BINDINGS = [Binding('left', 'older', 'Older'), Binding('right', 'newer', 'Newer'),
                 Binding('end', 'live', 'Live'), Binding('up', 'task(-1)', 'Task ↑'),
-                Binding('down', 'task(1)', 'Task ↓')]
+                Binding('down', 'task(1)', 'Task ↓'), Binding('ctrl+c', 'copy', 'Copy')]
     DEFAULT_CSS = 'KodamaCanvas { height: auto; } KodamaCanvas:focus { background: $surface; }'
 
     def __init__(self, history, **kwargs):
@@ -33,6 +52,10 @@ class KodamaCanvas(Static, can_focus=True):
 
     def on_resize(self):
         self.redraw()
+
+    def action_copy(self):
+        self.app.copy_to_clipboard(self.screen.get_selected_text() or str(self.render()))
+        self.notify('Copied Kodama text')
 
     def action_older(self):
         samples = list(self.history.samples)
@@ -283,8 +306,10 @@ class KodamaCanvas(Static, can_focus=True):
                  f' · wake alternatives {hex(val(selected.fields, "wake_mask")) if val(selected.fields, "wake_mask") is not None else "?"}')
         event = current.event
         if event:
-            args = ', '.join(k + '=' + (v.get('value') or '?') for k, v in event.get('arguments', {}).items())
-            line(f'  {event["semantics"]}: {event["function"]}({args})', accent)
+            line()
+            line('ACTIVITY', 'bold ' + accent)
+            args = event_arguments(current, self.history)
+            line(f'  {event["semantics"]}: {event["function"]}({args})', accent, wrap=True)
             exception = current.frame.get('exception')
             line(f'  caller {event.get("caller") or "?"} · exception {exception if exception is not None else "unknown"}', 'dim')
         frame = current.frame
@@ -295,7 +320,7 @@ class KodamaCanvas(Static, can_focus=True):
         for note in notes[:5]:
             line('  ! ' + note, colors['unknown'])
         line('One cell = one observed sample; unequal spacing, not duration. Requests are not proof of success.', 'dim')
-        line('Click task/cell to inspect · Left/Right scrub · End follows live · Up/Down select task', 'dim')
+        line('Click to inspect · ←/→ scrub · End live · ↑/↓ task · Ctrl+C copy selection/view', 'dim')
         self.update(out)
 
 
@@ -318,6 +343,7 @@ class KodamaPanel(Vertical):
             yield Button('Follow live', classes='kodama-live')
             yield Button('Setup', classes='kodama-setup')
             yield Button('Expand', classes='kodama-expand')
+            yield Button('Copy', classes='kodama-copy')
         with VerticalScroll(classes='kodama-scroll'):
             yield KodamaCanvas(self.history)
 
@@ -333,7 +359,9 @@ class KodamaPanel(Vertical):
     def on_button_pressed(self, event):
         event.stop()
         canvas = self.query_one(KodamaCanvas)
-        if event.button.has_class('kodama-older'):
+        if event.button.has_class('kodama-copy'):
+            canvas.action_copy()
+        elif event.button.has_class('kodama-older'):
             canvas.action_older()
         elif event.button.has_class('kodama-newer'):
             canvas.action_newer()

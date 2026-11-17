@@ -8,7 +8,7 @@ from unittest.mock import Mock
 from dbg3k.app import DebuggerApp
 from dbg3k.kodama_model import KodamaHistory, KodamaJournal, decode_sample
 from dbg3k.kodama_symbols import signal_labels
-from dbg3k.kodama_ui import KodamaCanvas, KodamaScreen, KodamaSetup
+from dbg3k.kodama_ui import KodamaCanvas, KodamaScreen, KodamaSetup, event_arguments
 
 
 def node(value, pointer=False):
@@ -58,6 +58,18 @@ def history():
 
 
 class KodamaModelTests(unittest.TestCase):
+    def test_event_aliases_require_unique_live_binding(self):
+        h = history()
+        data = sample()
+        data['event'] = dict(arguments={'context': node(0x38002008, True), 'sub': node(0x38004000, True)})
+        s = decode_sample(data, 1)
+        text = event_arguments(s, h)
+        self.assertIn('worker [1:1]', text)
+        self.assertIn('missing B', text)
+        self.assertIn('0x38002008', text)
+        s.tasks[1].active = False
+        self.assertEqual(event_arguments(s, h), 'context=0x38002008, sub=0x38004000')
+
     def test_old_and_packed_layout_waits_identity_and_pool_ownership(self):
         for packed in (False, True):
             h = KodamaHistory(); h.capture = 'fixture'
@@ -219,6 +231,10 @@ class KodamaWidgetTests(unittest.IsolatedAsyncioTestCase):
             await pilot.press('right')
             self.assertEqual(canvas.cursor, 4)
             self.assertIn('level HIGH observed', str(canvas.render()))
+            app.copy_to_clipboard = Mock()
+            await pilot.click('.kodama-copy')
+            app.copy_to_clipboard.assert_called_once()
+            self.assertIn('SIGNALS', app.copy_to_clipboard.call_args.args[0])
 
     async def test_wide_lanes_selection_scrub_expand_and_theme(self):
         app = self.app()
