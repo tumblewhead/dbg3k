@@ -24,6 +24,10 @@ For a repeating lesson that stays alive under the debugger, see the
 [Kodama live superloop](examples/kodama-live/README.md). Its application-owned
 SysTick requests a new run every emulated second; main never returns.
 
+**Diagram wiring:** the [Miro-to-YAML importer](docs/KODAMA_WIRING.md) accepts
+explicit AND/OR sensitivities and checks producer/consumer dependencies before
+writing a reviewed wiring specification. It does not infer task behavior.
+
 ## Getting started on Arch Linux
 
 Install Python 3.11+, make, arm-none-eabi-gcc, qemu-system-arm, GDB with ARM support.
