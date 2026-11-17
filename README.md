@@ -7,6 +7,11 @@ estimates, ELF function sizes, and optional QEMU instruction dispatch profiling.
 Local watches are user-confirmed; the resource collector has real AN505 emulator
 tests. Stack bounds, silicon cycles and measured power remain unavailable.
 
+**Hand off the Kodama demo:** [Complete operator walkthrough](docs/KODAMA_DEMO_HANDOFF.md)
+covers installation, both terminals, every lesson's UI/GDB steps, profiling,
+capture/replay and troubleshooting. The new `examples/kodama-demo/run.py` launcher
+loads the counting plugin and prints a matching dbg3k command with unique run files.
+
 **Structured observation capture:** use Ctrl+P → Observation capture to select
 expressions and start/stop typed snapshots in the existing JSONL trace. Or pass
 repeated `--observe "'kodama.c'::tasks"` flags. Scalars, fields, array elements,

@@ -1,5 +1,7 @@
 # Graphical Kodama state and timelines
 
+For a step-by-step presentation, use the [Kodama demo handoff guide](KODAMA_DEMO_HANDOFF.md).
+
 The Kodama pane spans the terminal below the source/scope workspace, like the
 GDB console. It opens automatically for an ELF containing kodama_run_one,
 including the configuration-tagged ABI. Existing debugger panes stay selectable.
