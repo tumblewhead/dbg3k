@@ -3,7 +3,7 @@
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/browser-history-inspector` (based on PR #17)
 **Review:** draft https://github.com/tumblewhead/dbg3k/pull/18, stacked on PR #17
-**Current stage:** Browser feedback fixed locally:side-by-side pool/lanes,smoother navigation,visible cycle/power estimates;106 checks94 pass12 skip,Chromium pass. Publishing updated pin.
+**Current stage:** Browser feedback fixed locally:side-by-side pool/lanes,smoother navigation,visible cycle/power estimates;106 checks94 pass12 skip,Chromium pass. Published code4270b86;Kodama pin updated in PR4.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
@@ -29,8 +29,10 @@ partial/complete/no-profile estimates,snapshot/session isolation and real Kodama
 recording. Dark/light/narrow screenshots inspected. Initial test polling violated
 CSP;locator polling fixes test without weakening policy. No target/MI/plugin/schema
 change or new QEMU run;previous real capture replayed. Mac/frame-rate unqualified.
-Receipt:handoff/browser-feedback-validation.json. Next:push PR18 update and refresh
-Kodama PR4 submodule;user pulls same demo/browser-history-001 branch.
+Receipt:handoff/browser-feedback-validation.json. Published PR18 source
+4270b8695caa115364bdc160c497e04e2c193479;CI44230651365 running. Kodama PR4
+source d03a868e5310a35abbb5c71416625afcfccbae3f pins it. Next:check CI;user pulls
+same demo/browser-history-001,updates submodules and refreshes browser.
 
 ### 2026-11-17: local browser inspector for the complete recorded history
 
