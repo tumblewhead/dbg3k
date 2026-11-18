@@ -7,6 +7,12 @@ estimates, ELF function sizes, and optional QEMU instruction dispatch profiling.
 Local watches are user-confirmed; the resource collector has real AN505 emulator
 tests. Stack bounds, silicon cycles and measured power remain unavailable.
 
+**Browser history inspector:** run `python -m dbg3k.history_browser`, open the
+printed local URL, and choose a dbg3k JSONL. Browse the entire indexed capture,
+task/signal lanes, coroutine pool, stack records, function/entry-hit rankings and
+explicit-model cycle/energy/power estimates. No GDB, QEMU or ELF is needed for
+inspection, and files stay in the browser. See [the workflow](docs/BROWSER_HISTORY.md).
+
 **Hand off the Kodama demo:** [Complete operator walkthrough](docs/KODAMA_DEMO_HANDOFF.md)
 covers installation, both terminals, every lesson's UI/GDB steps, profiling,
 capture/replay and troubleshooting. The new `examples/kodama-demo/run.py` launcher

@@ -1,5 +1,10 @@
 # Run and present the Kodama demo with dbg3k
 
+For full-file history inspection, see the [browser workflow](BROWSER_HISTORY.md):
+run `python -m dbg3k.history_browser`, open its local URL and select the JSONL.
+It adds task/signal/pool, stack, instruction and electrical-model history views
+without launching GDB/QEMU or requiring the original ELF.
+
 This guide is for someone receiving the demo for the first time. It covers
 setup, both terminals, the UI, the GDB commands, profiling, saving a session,
 and recovery from the problems encountered during development.

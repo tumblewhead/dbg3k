@@ -1,13 +1,48 @@
 # dbg3k: development history and continuation
 
 **Repository:** https://github.com/tumblewhead/dbg3k
-**Working branch:** `feature/kodama-demo-handoff` (based on PR #16)
-**Review:** draft https://github.com/tumblewhead/dbg3k/pull/17, stacked on PR #16
-**Current stage:** Complete demo operator guide, printable HTML and plugin-enabled paired launcher.103 tests:92 pass/11 opt-in skips; real workshop/plugin checks pass; compileall/whitespace pass.
+**Working branch:** `feature/browser-history-inspector` (based on PR #17)
+**Review:** browser history draft pending, stacked on PR #17
+**Current stage:** Browser JSONL inspector local-pass:106 checks94 pass12 skips; real Chromium and Kodama/QEMU/catalog/plugin checks pass. Publication next.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
+
+### 2026-11-17: local browser inspector for the complete recorded history
+
+User wants dbg3k capture -> choose JSONL in browser -> full task/signal/pool and
+profiling inspection. Added stdlib loopback fixed-asset server, pure JS domain
+model, streaming worker byte index and responsive dark/light canvas frontend.
+No GDB/QEMU/ELF required to inspect; selected files stay in browser. All accepted
+samples remain selectable by session/capture beyond512 live retention, with
+whole-capture overview, page/stop/zoom/jump/keyboard navigation and explicit gaps.
+Pool ownership is validated; task identities include generation/regression epoch.
+
+Profiling keeps cumulative QEMU snapshots separate, validates totals/build and
+retains exact wide counters. Rankings include entry-hit proxies/frequency ratios,
+code bytes, instruction density, modeled cycles/charge/energy and average power
+only with explicit target duration. No silicon-cycle/physical-power claims.
+Recorded models stay session-local; overrides remain derived browser state.
+Stacks/memory/typed watches/returns/raw records are inspectable by journal seq.
+Exact raw downloads preserve original numeric tokens. Added128-body code_catalog
+chunks to existing trace.v1 so new files carry names/aliases/sizes without ELF;
+older files work with body keys. No target calls or collector-budget changes.
+
+106 ordinary checks:94 pass12 opt-in skips in24.093s. Native index/server tests
+include6201 synthetic samples; real Chromium file/UI/export/privacy flow passes
+in3.615s with zero JS errors/dialogs and only local GET assets. Dark/light/narrow
+screens inspected. Independent actual Kodama/QEMU/plugin test passes in8.998s,
+including complete matching-hash catalog and populated rankings/observations/API.
+Wheel contains all5 assets/new entry point; compileall/whitespace pass. Separate
+synthetic and actual evidence; native Mac/Safari and million-sample benchmark
+unqualified. Receipt:handoff/browser-history-validation.json. Retained failures:
+initial pip sandbox DNS;venv missing build backend corrected using system build;
+doc patch heading corrected. User history directories untouched.
+
+Start: python -m dbg3k.history_browser -> http://127.0.0.1:8767 -> Open JSONL.
+Guide:docs/BROWSER_HISTORY.md. Next: publish review and update clean Kodama demo's
+pinned submodule/guide on demo/browser-history-001;check CI.
 
 ### 2026-11-17: operator handoff and plugin-enabled demo launch
 

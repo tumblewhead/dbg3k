@@ -11,6 +11,10 @@ dependencies = ["textual>=0.80,<8", "rich>=13,<16", "pyelftools>=0.31,<1"]
 
 [project.scripts]
 dbg3k = "dbg3k.__main__:main"
+dbg3k-history = "dbg3k.history_browser:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+dbg3k = ["browser/*.html", "browser/*.css", "browser/*.js"]

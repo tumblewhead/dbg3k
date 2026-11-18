@@ -1,5 +1,12 @@
 # dbg3k architecture and measurement contracts
 
+The offline browser inspector serves fixed local assets and reads selected
+JSONL files entirely in a browser worker. It indexes byte offsets and compact
+session/capture metadata, reading bounded viewports on demand. The renderer,
+pure domain decoder and file index remain separate from GDB/MI and the live TUI.
+New bounded `code_catalog` chunks make recorded function profiles usable without
+an ELF. Existing schemas/readers remain compatible. See [BROWSER_HISTORY.md](BROWSER_HISTORY.md).
+
 ## Product
 
 A stylish, fast, keyboard-first source debugger for Cortex-M firmware in QEMU. Concept name qscope. CGDB-like navigation into startup, handlers and assembly. Source pane, scope tree, locals with change highlighting and sparklines, compact stepping bar and GDB console. Nerd Font optional; Unicode fallback. Execution `▶` and browsing `▸` cursors separate. Stack/variable stop-state updates only while halted; independent QEMU count snapshots can update while running.

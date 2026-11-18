@@ -32,6 +32,7 @@ Every object includes: **schema="dbg3k.trace.v1"**, **kind**, **session**, **seq
 | session_end | target |
 | stack_sample | stop, thread, registers (unavailable values null), frames (level/function/PC/SP/kind), optional memory (start, hex; cap 256 bytes), memory_error, origin=gdb-unwound-registers |
 | instruction_profile | ELF SHA256, QEMU run UUID, profile_seq (separate from JSONL envelope seq), total, unknown, complete, exclusive counts and entry_hits by emitted body, origin=qemu-plugin-instruction-dispatch |
+| code_catalog | catalog_version=1, ELF SHA256, machine, chunk_index/chunk_count, functions (key, section, hex start, byte size, names/aliases), origin=elf-symbol-table |
 | energy_model | ua_per_mhz, mips_per_mhz, voltage, origin=user-configured-active-core-model |
 | debugger_metadata | GDB version, architecture, connection and available frame/thread metadata |
 | observation_config | stop, enabled, selected expressions, expansion limits |
@@ -69,6 +70,13 @@ Instruction snapshots are periodic cumulative QEMU-run dispatch counts, not
 stop-synchronized instruction traces. Stack samples are accepted only for the
 current halted stop/thread. Energy model entries record assumptions, not power
 measurements. See [RESOURCES.md](RESOURCES.md).
+
+The [browser inspector](BROWSER_HISTORY.md) reads these same records locally.
+New `code_catalog` chunks contain at most128 emitted bodies each, allowing offline
+names and code sizes without the ELF. Readers ignore this additive kind if
+unsupported. Older files remain readable with body keys in place of missing
+names. Chunk completeness and ELF/session association are checked; a catalog
+does not authenticate an externally supplied capture.
 
 Illustrative return record (not actual simulation data):
 
