@@ -23,6 +23,11 @@ class BrowserUiTests(unittest.TestCase):
             env = dict(os.environ, DBG3K_BROWSER_FIXTURE=str(fixture))
             subprocess.run(['node', str(ROOT / 'tests/browser_model_test.js'), str(data)],
                            env=env, capture_output=True, check=True, timeout=60)
+            with fixture.open('a') as stream:
+                for seq, kind, fields in [(1, 'session_start', {'elf_sha256': 'unprofiled'}),
+                                          (2, 'kodama_sample', {'data': sample()})]:
+                    stream.write(json.dumps(dict(schema='dbg3k.trace.v1', session='no-profile',
+                                                 seq=seq, kind=kind, **fields)) + '\n')
             bad = folder / 'bad.jsonl'
             bad.write_text('not-json\n{"interrupted":')
             server = subprocess.Popen([sys.executable, '-m', 'dbg3k.history_browser', '--port', '0'],
@@ -44,6 +49,12 @@ class BrowserUiTests(unittest.TestCase):
                     page.locator('#capture').select_option('fixture')
                     expect(page.locator('#sample-count')).to_have_text('6,201')
                     expect(page.locator('#cursor-label')).to_contain_text('Sample 1 /', timeout=30000)
+                    lanes_box = page.locator('.timeline-layout > .panel').first.bounding_box()
+                    pool_box = page.locator('#pool-panel').bounding_box()
+                    self.assertGreaterEqual(pool_box['x'], lanes_box['x'] + lanes_box['width'])
+                    self.assertLess(abs(lanes_box['y'] - pool_box['y']), 2)
+                    expect(page.locator('#pool-panel')).to_be_in_viewport()
+                    expect(page.locator('.lane-scroll')).to_be_in_viewport()
                     page.locator('#latest').click()
                     expect(page.locator('#cursor-label')).to_contain_text('Sample 6,201 /', timeout=30000)
                     expect(page.locator('#tasks')).to_contain_text('@e1')
@@ -58,14 +69,28 @@ class BrowserUiTests(unittest.TestCase):
                     expect(page.locator('#cursor-label')).to_contain_text('Sample 3,001 /', timeout=30000)
                     page.locator('#lanes').focus(); page.keyboard.press('ArrowRight')
                     expect(page.locator('#cursor-label')).to_contain_text('Sample 3,002 /')
-                    page.locator('[data-tab=profiling]').click()
+                    page.locator('.lane-scroll').hover()
+                    page.mouse.wheel(180, 0)
+                    expect(page.locator('#jump')).not_to_have_value('3002')
+                    self.assertGreater(int(page.locator('#jump').input_value()), 3002)
+                    page.evaluate("""() => {
+                        const pan = document.getElementById('pan');
+                        for (let n = 3500; n <= 3530; n++) {
+                            pan.value = n; pan.dispatchEvent(new Event('input'));
+                        }
+                    }""")
+                    expect(page.locator('#cursor-label')).to_contain_text('Sample 3,531 /')
+                    page.locator('#configure-estimates').click()
+                    expect(page.locator('#model-editor')).to_have_attribute('open', '')
                     expect(page.locator('#functions')).to_contain_text('worker<script>')
                     expect(page.locator('#functions')).to_contain_text('9,007,199,254,740,993,120')
                     page.locator('#sort').select_option('entries')
-                    page.locator('.model-editor summary').click()
+                    expect(page.locator('#cycle-total')).not_to_have_text('Unavailable')
+                    expect(page.locator('#power-total')).to_have_text('Unavailable')
                     page.locator('#duration').fill('2'); page.locator('#apply-model').click()
                     expect(page.locator('#model-status')).to_contain_text('User-supplied cumulative target duration 2 s')
                     expect(page.locator('#profile-summary')).to_contain_text('µW')
+                    expect(page.locator('#power-total')).not_to_have_text('Unavailable')
                     with page.expect_download() as info: page.locator('#export-profile').click()
                     download = folder / 'profile.csv'; info.value.save_as(download)
                     self.assertIn('9007199254740993120', download.read_text())
@@ -84,6 +109,21 @@ class BrowserUiTests(unittest.TestCase):
                     page.locator('#session').select_option('two')
                     expect(page.locator('#sample-count')).to_have_text('0')
                     expect(page.locator('#energy-total')).to_have_text('Unavailable')
+                    expect(page.locator('#cycle-total')).to_have_text('Unavailable')
+                    page.locator('#configure-estimates').click()
+                    page.locator('#throughput').fill('2'); page.locator('#apply-model').click()
+                    expect(page.locator('#cycle-total')).to_have_text('5')
+                    expect(page.locator('#energy-total')).to_have_text('Unavailable')
+                    expect(page.locator('#power-total')).to_have_text('Unavailable')
+                    expect(page.locator('#power-caption')).to_contain_text('electrical assumptions')
+                    page.locator('#current').fill('48'); page.locator('#voltage').fill('1.8')
+                    page.locator('#duration').fill('2'); page.locator('#apply-model').click()
+                    expect(page.locator('#power-total')).not_to_have_text('Unavailable')
+                    page.locator('#session').select_option('no-profile')
+                    expect(page.locator('#instruction-count')).to_have_text('Unavailable')
+                    expect(page.locator('#cycle-total')).to_have_text('Unavailable')
+                    expect(page.locator('#power-total')).to_have_text('Unavailable')
+                    expect(page.locator('#estimate-reason')).to_contain_text('counting plugin')
                     page.locator('#file').set_input_files(bad)
                     expect(page.locator('#status')).to_contain_text('Cannot open recording', timeout=30000)
                     expect(page.locator('#workspace')).to_be_hidden()
@@ -102,6 +142,20 @@ class BrowserUiTests(unittest.TestCase):
                         page.locator('[data-tab=profiling]').click()
                         expect(page.locator('#profile-provenance')).to_contain_text('recorded ELF symbol catalog', timeout=30000)
                         expect(page.locator('#functions')).not_to_be_empty()
+                        page.locator('#configure-estimates').click()
+                        # Explicit illustrative duration, never inferred from host time.
+                        page.locator('#duration').fill('6'); page.locator('#apply-model').click()
+                        expect(page.locator('#power-total')).not_to_have_text('Unavailable')
+                        latest_profile = page.locator('#profile-snapshot').input_value()
+                        latest_caption = page.locator('#instruction-caption').inner_text()
+                        page.locator('#profile-snapshot').select_option('0')
+                        expect(page.locator('#instruction-caption')).not_to_have_text(latest_caption)
+                        expect(page.locator('#duration')).to_have_value('')
+                        expect(page.locator('#power-total')).to_have_text('Unavailable')
+                        page.locator('#profile-snapshot').select_option(latest_profile)
+                        expect(page.locator('#instruction-caption')).to_have_text(latest_caption)
+                        page.locator('#duration').fill('6'); page.locator('#apply-model').click()
+                        expect(page.locator('#power-total')).not_to_have_text('Unavailable')
                     if receipt:
                         dest = Path(receipt); dest.mkdir(parents=True, exist_ok=True)
                         page.locator('[data-tab=profiling]').click()

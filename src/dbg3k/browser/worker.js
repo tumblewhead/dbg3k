@@ -6,9 +6,29 @@ class TraceIndex {
   constructor(file) {
     this.file = file; this.sessions = new Map(); this.errors = []; this.errorCount = 0;
     this.lines = 0; this.indexed = 0; this.finished = false;
+    this.cache = new Map(); this.cacheBytes = 0; this.fileReads = 0;
   }
   issue(message) { this.errorCount++; if (this.errors.length < 100) this.errors.push(message); }
-  async read(ref) { return M.parse(await this.file.slice(ref.start, ref.end).text()); }
+  async read(ref) {
+    const cached = this.cache.get(ref.start);
+    if (cached) {
+      this.cache.delete(ref.start); this.cache.set(ref.start, cached);
+      return cached.record;
+    }
+    const record = M.parse(await this.file.slice(ref.start, ref.end).text());
+    this.fileReads++;
+    const bytes = ref.end - ref.start;
+    // Repeated cursor/nearby-window reads are common during a trackpad gesture.
+    // Bound this acceleration cache independently of the durable file index.
+    const previous = this.cache.get(ref.start);
+    if (previous) this.cacheBytes -= previous.bytes;
+    this.cache.set(ref.start, {record, bytes}); this.cacheBytes += bytes;
+    while (this.cache.size > 1024 || this.cacheBytes > 16 * 1024 * 1024) {
+      const key = this.cache.keys().next().value;
+      this.cacheBytes -= this.cache.get(key).bytes; this.cache.delete(key);
+    }
+    return record;
+  }
   async scan(progress = () => {}) {
     const reader = this.file.stream().getReader();
     let pending = new Uint8Array(), base = 0, oversized = false, bytes = 0, lastProgress = 0;

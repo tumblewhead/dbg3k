@@ -8,7 +8,8 @@ All assets are local, with no external fonts, analytics or network services.
 Screenshots: [task/signal/pool history](images/browser-history.png) and
 [function/energy profile](images/browser-profile.png). These use an actual
 Kodama/QEMU capture; the electrical inputs48/1/1.8 are illustrative test
-assumptions, not measured device properties.
+assumptions, with a6-second illustrative target-duration input for the power
+preview; none are measured device properties.
 
 ## Start the viewer
 
@@ -85,10 +86,16 @@ selectable. They are never silently merged into one apparent task lifetime.
 
 The browser indexes every accepted sample in the selected capture, rather than
 keeping only the last512 displayed by the live TUI. The overview and history
-slider span that entire capture. **First**, **Last**, page buttons, stop buttons
+slider span that entire capture. On desktop-width windows the coroutine pool sits
+beside the lanes and stays visible while browsing; narrower windows stack the
+panels. The pool and long lane area scroll independently. **First**, **Last**, page buttons, stop buttons
 and **Go to sample** provide direct navigation. **Columns** controls zoom from
 32 to512 observations. Click a column to inspect it; focus the canvas and use
-Left/Right, Home/End or Page Up/Down for keyboard navigation.
+Left/Right, Home/End or Page Up/Down for keyboard navigation. Horizontal trackpad
+scrolling or Shift+wheel pans history. Movement is coalesced to the latest
+requested viewport, and a bounded recent-record cache avoids rereading the full
+window for a small pan. The cache holds at most1024 parsed records or16 MiB of
+input bytes, independently of the full file index.
 
 Each column is an observation, not an equal time interval. Stop boundaries are
 marked S1, S2, etc. Task rows group scheduler slots; the selected inspector shows
@@ -144,13 +151,19 @@ bodies with no attributed dispatches appear with zero counts. Inlined source
 functions need not have distinct emitted bodies. Calls, recursion, coroutine
 resumes, tail calls and interrupts are not reconstructed into exact invocations.
 
-Open **Electrical assumptions and optional target duration** to inspect the
-recorded model or apply local overrides. All three electrical inputs must be
-positive and finite. Leaving all three blank explicitly disables the local
-model. Reset restores the recorded model, without borrowing one from another
-session. No target duration is inferred from wall-clock timestamps or debugger
+The summary has separate **Estimated cycles** and **Average active-core power**
+cards, with a reason when a value is unavailable. **Configure estimates** opens
+the profiling tab and focuses the next missing input. Open **Cycle, electrical
+and duration assumptions** to inspect the recorded model or apply local
+overrides. Each supplied input must be positive and finite. Throughput alone
+enables estimated cycles; current plus throughput enables estimated charge;
+adding voltage enables energy. Average power also needs target duration. Blank
+inputs remain unavailable, rather than becoming zero. Leaving all three model
+inputs blank disables the local model. Reset restores the recorded model,
+without borrowing one from another session. No target duration is inferred from wall-clock timestamps or debugger
 delays. The optional duration must correspond to the selected cumulative QEMU
-counter window. Changing QEMU runs clears that duration.
+counter window. Changing the selected cumulative snapshot or QEMU run clears that duration,
+so an assumption for one counter window does not silently carry into another.
 
 ```text
 estimated_cycles = dispatches / (MIPS/MHz)

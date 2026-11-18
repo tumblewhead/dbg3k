@@ -110,6 +110,17 @@
     return record && ['ua_per_mhz', 'mips_per_mhz', 'voltage'].every(k =>
       typeof record[k] === 'number' && Number.isFinite(record[k]) && record[k] > 0);
   }
+  function estimates(instructions, model = null, duration = null) {
+    const positive = v => typeof v === 'number' && Number.isFinite(v) && v > 0;
+    const value = integer(instructions);
+    const count = value === null ? NaN : Number(value);
+    const finite = v => Number.isFinite(v) && v >= 0 ? v : null;
+    const cycles = positive(model?.mips_per_mhz) ? finite(count / model.mips_per_mhz) : null;
+    const charge = cycles !== null && positive(model?.ua_per_mhz) ? finite(cycles * model.ua_per_mhz) : null;
+    const energy = charge !== null && positive(model?.voltage) ? finite(charge * model.voltage) : null;
+    const power = energy !== null && positive(duration) ? finite(energy * 1e-6 / duration) : null;
+    return {cycles, charge, energy, power};
+  }
   function validateProfile(record, hash, previous = null) {
     if (!hash || record.elf_sha256 !== hash || typeof record.run !== 'string' || !record.run ||
         !Number.isSafeInteger(record.profile_seq) || record.profile_seq < 0 || typeof record.complete !== 'boolean') throw Error('Invalid profile identity');
@@ -141,6 +152,7 @@
       const inferred = match ? Number(match[1]) : null;
       const size = meta?.size ?? (Number.isSafeInteger(inferred) ? inferred : null);
       const entries = entriesAvailable ? integer(record.entry_hits[key] ?? 0) : null;
+      const derived = estimates(count, model, duration);
       return {key, name: meta?.names?.join(' / ') || key, size, count: count.toString(),
         entries: entries?.toString() ?? null,
         share: total > 0n ? Number(count * 1000000n / total) / 10000 : 0,
@@ -148,16 +160,12 @@
         perEntry: entries > 0n ? Number(count) / Number(entries) : null,
         perMillion: entries !== null && total > 0n ? Number(entries * 1000000n) / Number(total) : null,
         hz: entries !== null && duration > 0 ? Number(entries) / duration : null,
-        cycles: model ? Number(count) / model.mips_per_mhz : null,
-        charge: model ? Number(count) * model.ua_per_mhz / model.mips_per_mhz : null,
-        energy: model ? Number(count) * model.ua_per_mhz / model.mips_per_mhz * model.voltage : null};
+        cycles: derived.cycles, charge: derived.charge, energy: derived.energy};
     });
     const unknown = integer(record.unknown);
     if (unknown > 0n) rows.push({key: '?', name: 'Unattributed dispatches', count: unknown.toString(), entries: null,
       size: null, share: Number(unknown * 1000000n / total) / 10000,
-      cycles: model ? Number(unknown) / model.mips_per_mhz : null,
-      energy: model ? Number(unknown) * model.ua_per_mhz / model.mips_per_mhz * model.voltage : null,
-      charge: model ? Number(unknown) * model.ua_per_mhz / model.mips_per_mhz : null});
+      ...estimates(unknown, model, duration)});
     return rows;
   }
   function waitText(task, labels, sample) {
@@ -181,7 +189,7 @@
     }
     return task.state === 'waiting' ? 'subscription unavailable' : task.state;
   }
-  const api = {parse, integer, scalar, small, identity, decode, positiveModel, validateProfile, profileRows, waitText};
+  const api = {parse, integer, scalar, small, identity, decode, positiveModel, estimates, validateProfile, profileRows, waitText};
   root.TraceModel = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(globalThis);

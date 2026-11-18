@@ -5,6 +5,8 @@ let worker = null, requestId = 0, pending = new Map(), summary = null;
 let session = null, capture = null, view = null, cursor = 0, start = 0, columns = 128;
 let profile = null, profileIndex = -1, rows = [], functionPage = 0, override = false, localModel = null;
 let modelDuration = null, rawRecord = null, rawText = '', viewGeneration = 0, profileGeneration = 0, recordGeneration = 0;
+let viewBusy = null, viewQueued = false, viewFrame = 0, wheelRemainder = 0;
+const palette = new Map();
 const PAGE = 75, LABEL_WIDTH = 215, ROW = 25;
 function status(text, error = false) { $('status').textContent = text; $('status').classList.toggle('error', error); }
 function element(tag, text, className) { const e = document.createElement(tag); if (text !== undefined) e.textContent = String(text); if (className) e.className = className; return e; }
@@ -18,7 +20,10 @@ function scaled(value, unit) {
   const [scale, prefix] = groups.find(([scale]) => Math.abs(value) >= scale) || groups[4];
   return `${number(value / scale)} ${prefix}${unit}`;
 }
-function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(`--${name}`).trim(); }
+function css(name) {
+  if (!palette.has(name)) palette.set(name, getComputedStyle(document.documentElement).getPropertyValue(`--${name}`).trim());
+  return palette.get(name);
+}
 function stateColor(state) { return css(['running', 'ready', 'waiting', 'sleeping', 'parked', 'free'].includes(state) ? state : state === 'retired' ? 'free' : 'unknown'); }
 function rpc(type, args = {}) {
   const id = ++requestId;
@@ -34,6 +39,8 @@ async function openFile(file) {
   if (worker) worker.terminate();
   for (const p of pending.values()) p.reject(Error('Recording changed'));
   pending = new Map(); viewGeneration++; profileGeneration++; recordGeneration++;
+  viewQueued = false; wheelRemainder = 0;
+  cancelAnimationFrame(viewFrame); viewFrame = 0;
   summary = session = capture = view = profile = rawRecord = null; rawText = ''; rows = [];
   $('workspace').hidden = true; $('intro').hidden = false; $('progress').hidden = false;
   $('progress').value = 0; status(`Indexing ${file.name} locally…`);
@@ -80,10 +87,10 @@ async function changeSession() {
 }
 async function changeCapture() {
   capture = session.captures.find(c => c.id === $('capture').value) || null;
-  cursor = 0; start = 0; view = null;
+  cursor = 0; start = 0; view = null; wheelRemainder = 0;
   $('sample-count').textContent = capture ? count(capture.count) : '0';
   $('profile-cursor').disabled = !capture?.count;
-  $('pan').max = Math.max(0, (capture?.count || 0) - 1); $('pan').value = 0;
+  $('pan').max = Math.max(0, (capture?.count || 0) - columns); $('pan').value = 0;
   $('jump').max = Math.max(1, capture?.count || 0); $('jump').value = 1;
   coverage();
   if (capture?.count) await loadView();
@@ -97,6 +104,9 @@ async function changeCapture() {
 async function loadView() {
   if (!capture?.count) return;
   const generation = ++viewGeneration;
+  if (viewBusy) { viewQueued = true; return; }
+  const token = {}; viewBusy = token;
+  start = Math.max(0, Math.min(start, capture.count - columns));
   try {
     const result = await rpc('view', {session: session.id, capture: capture.id, start, count: columns, selected: cursor});
     if (generation !== viewGeneration) return;
@@ -106,13 +116,24 @@ async function loadView() {
     $('cursor-label').textContent = `Sample ${count(cursor + 1)} / collector #${view.detail.sequence} · stop ${view.detail.stop} · journal #${view.detail.journalSeq} · tick ${view.detail.tick ?? '?'}`;
     details(); drawTimeline(); drawStack(result.stack);
   } catch (error) { if (generation === viewGeneration) status(`Cannot read viewport: ${error.message}`, true); }
+  finally {
+    if (viewBusy === token) viewBusy = null;
+    if (viewQueued) { viewQueued = false; scheduleView(); }
+  }
+}
+function scheduleView() {
+  // Invalidate stale results immediately, but emit at most one request per frame
+  // and keep only the newest requested position while a read is in flight.
+  viewGeneration++;
+  if (!viewFrame) viewFrame = requestAnimationFrame(() => { viewFrame = 0; loadView(); });
 }
 function go(index, panOnly = false) {
   if (!capture?.count) return;
   index = Math.max(0, Math.min(capture.count - 1, Math.round(index)));
   cursor = index;
   if (panOnly || index < start || index >= start + columns) start = Math.max(0, index - (panOnly ? 0 : Math.floor(columns / 2)));
-  loadView();
+  start = Math.max(0, Math.min(start, capture.count - columns));
+  scheduleView();
 }
 function details() {
   const d = view.detail, event = d.event;
@@ -140,10 +161,10 @@ function details() {
   }));
   $('pool').replaceChildren(...d.pool.map(p => {
     const box = element('div', undefined, 'pool-slot'); box.style.setProperty('--slot-color', stateColor(p.state));
-    box.append(element('strong', `#${p.slot} · ${p.name}`), element('small', `${p.state} · capacity ${p.capacity ?? '?'} B`));
+    box.append(element('strong', `#${p.slot} · ${p.name}`), element('small', `${p.state} · ${p.capacity ?? '?'} B`));
     let end = '?'; const address = M.integer(p.address), extent = M.integer(p.extent);
     if (address !== null && extent !== null) end = '0x' + (address + extent).toString(16);
-    box.append(element('small', `${p.address || '?'} – ${end} (slot extent)`), element('small', p.owner || 'No validated owner'));
+    box.append(element('small', `${p.address || '?'} – ${end}`), element('small', p.owner || 'No validated owner'));
     return box;
   }));
   $('pool-total').textContent = `${d.pool.filter(p => p.used === true).length} occupied / ${d.pool.length} observed slots`;
@@ -221,24 +242,25 @@ function drawTimeline() {
       ctx.fillStyle = css('muted'); if (i % Math.max(1, Math.ceil(65 / cell)) === 0 || !i) ctx.fillText(`S${s.stop}`, x + 3, 43);
     }
   });
-  const selectedX = LABEL_WIDTH + (cursor - start + .5) * cell;
-  if (cursor >= start && cursor < start + view.samples.length) {
+  const selectedX = LABEL_WIDTH + (view.selected - view.start + .5) * cell;
+  if (view.selected >= view.start && view.selected < view.start + view.samples.length) {
     ctx.strokeStyle = css('accent'); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(selectedX, 33); ctx.lineTo(selectedX, height - 8); ctx.stroke();
   }
   const overview = surface($('overview'), 40), buckets = capture.overview;
   buckets.forEach((b, i) => { const x = i * overview.width / buckets.length; overview.ctx.fillStyle = b.gap ? css('danger') : css('blue'); overview.ctx.globalAlpha = .55;
     overview.ctx.fillRect(x, b.api ? 9 : 25, Math.max(1, overview.width / buckets.length), b.api ? 22 : 6); });
   overview.ctx.globalAlpha = 1; overview.ctx.strokeStyle = css('accent');
-  overview.ctx.strokeRect(start / capture.count * overview.width, 3, Math.max(4, view.samples.length / capture.count * overview.width), 33);
+  overview.ctx.strokeRect(view.start / capture.count * overview.width, 3, Math.max(4, view.samples.length / capture.count * overview.width), 33);
 }
 async function loadProfile() {
   const generation = ++profileGeneration;
   const oldRun = profile?.record.run;
+  const oldSnapshot = profile?.record.profile_seq;
   try {
     const result = profileIndex >= 0 ? await rpc('profile', {session: session.id, index: profileIndex}) : null;
     if (generation !== profileGeneration) return;
     profile = result;
-    if (oldRun && oldRun !== result?.record.run) { modelDuration = null; $('duration').value = ''; }
+    if (oldRun && (oldRun !== result?.record.run || oldSnapshot !== result?.record.profile_seq)) { modelDuration = null; $('duration').value = ''; }
     if (!override) {
       for (const [id, key] of [['current', 'ua_per_mhz'], ['throughput', 'mips_per_mhz'], ['voltage', 'voltage']]) $(id).value = result?.model?.[key] ?? '';
     }
@@ -248,24 +270,38 @@ async function loadProfile() {
 function renderProfile() {
   const model = override ? localModel : profile?.model;
   if (!profile) {
-    $('instruction-count').textContent = '—'; $('entry-count').textContent = '—'; $('energy-total').textContent = '—';
-    $('instruction-caption').textContent = 'No instruction profile recorded'; $('energy-caption').textContent = 'Enable plugin and record electrical assumptions';
-    $('profile-provenance').textContent = session?.profiles.length ? 'No profile received before the selected cursor. Choose a later recorded snapshot; profile polling is independent of target stops.' : 'No validated instruction profile in this session. Task snapshots cannot reconstruct instruction or call counts.';
+    for (const id of ['instruction-count', 'entry-count', 'energy-total', 'cycle-total', 'power-total']) $(id).textContent = 'Unavailable';
+    const message = session?.profiles.length ? 'No profile received before cursor; select a later snapshot.' : 'No instruction profile recorded; capture with the QEMU counting plugin.';
+    $('instruction-caption').textContent = message;
+    $('energy-caption').textContent = 'Instruction counts and an electrical model are required';
+    $('cycle-caption').textContent = 'Instruction counts and throughput are required';
+    $('power-caption').textContent = 'Instruction counts, model and target duration are required';
+    $('estimate-reason').textContent = message;
+    $('profile-provenance').textContent = session?.profiles.length ? 'No profile received before the selected cursor. Choose a later recorded snapshot; profile polling is independent of target stops.' : 'No validated instruction profile in this session. Run QEMU with the counting plugin and pass its matching --instruction-profile path to dbg3k; task snapshots cannot reconstruct instruction or call counts.';
     $('profile-summary').textContent = ''; $('model-status').textContent = 'No recorded profile/model selected.';
     rows = []; $('functions').replaceChildren(); $('pareto').textContent = 'Unavailable'; $('energy-bars').textContent = 'Unavailable'; $('functions-range').textContent = '0 functions'; return;
   }
   const r = profile.record, catalog = new Map(profile.catalog);
+  const derived = M.estimates(r.total, model, modelDuration);
   rows = M.profileRows(r, catalog, model, modelDuration);
   $('instruction-count').textContent = count(r.total);
   $('instruction-caption').textContent = `QEMU ${r.run.slice(0, 8)} · snapshot ${r.profile_seq}`;
-  $('entry-count').textContent = r.entry_hits === undefined ? '—' : count(Object.values(r.entry_hits).reduce((sum, n) => sum + M.integer(n), 0n));
-  const energy = model ? Number(M.integer(r.total)) * model.ua_per_mhz / model.mips_per_mhz * model.voltage : null;
-  $('energy-total').textContent = scaled(energy, 'J');
-  $('energy-caption').textContent = model ? `${override ? 'Local' : 'Recorded'} assumptions · ${model.ua_per_mhz} µA/MHz · ${model.voltage} V` : 'No electrical assumptions recorded';
+  $('entry-count').textContent = r.entry_hits === undefined ? 'Unavailable' : count(Object.values(r.entry_hits).reduce((sum, n) => sum + M.integer(n), 0n));
+  $('cycle-total').textContent = derived.cycles === null ? 'Unavailable' : number(derived.cycles);
+  $('cycle-caption').textContent = derived.cycles === null ? 'Set throughput in MIPS/MHz to estimate cycles' : `${model.mips_per_mhz} MIPS/MHz assumed · not measured silicon cycles`;
+  $('energy-total').textContent = scaled(derived.energy, 'J');
+  $('energy-caption').textContent = derived.energy !== null ? `${override ? 'Local' : 'Recorded'} assumptions · ${model.ua_per_mhz} µA/MHz · ${model.voltage} V` : derived.cycles !== null ? 'Add active current and supply voltage for energy' : 'Set throughput, active current and supply voltage';
+  $('power-total').textContent = derived.power === null ? 'Unavailable' : scaled(derived.power * 1e6, 'W');
+  $('power-caption').textContent = derived.energy === null ? 'Set electrical assumptions, then target duration' : !modelDuration ? 'Enter target seconds for this cumulative profile' : `${modelDuration} target s assumed · energy / duration`;
+  const missing = [];
+  if (derived.cycles === null) missing.push('throughput for cycles');
+  if (derived.energy === null) missing.push('current, throughput and voltage for energy');
+  if (!modelDuration) missing.push('target duration for average power');
+  $('estimate-reason').textContent = missing.length ? `To populate estimates, supply ${missing.join('; ')}.` : 'Cycle, energy and average-power values use explicit assumptions; measured silicon cycles/power remain unavailable.';
   $('profile-provenance').textContent = `Journal #${r.seq} · QEMU run ${r.run} · ${r.complete ? 'collector final snapshot' : 'partial cumulative run snapshot'} · ${session.catalogComplete ? 'recorded ELF symbol catalog' : 'catalog missing/partial; emitted-body keys remain inspectable'}. Profiles are independently polled; “at cursor” means received before that journal record, not exact target-stop synchronization.`;
-  $('model-status').textContent = model ? `${override ? 'Local override; derived values only' : 'Recorded: ' + (profile.model?.source || 'explicit assumptions')} · throughput ${model.mips_per_mhz} MIPS/MHz. ${modelDuration ? `User-supplied cumulative target duration ${modelDuration} s.` : 'No target duration: entries/s and average power unavailable.'}` : 'No model: energy and estimated cycles unavailable. Enter all three positive assumptions to calculate estimates.';
-  const cycles = model ? Number(M.integer(r.total)) / model.mips_per_mhz : null;
-  $('profile-summary').replaceChildren(element('span', `Unattributed: ${count(r.unknown)} dispatches`), element('span', `Estimated cycles: ${number(cycles)}`), element('span', `Estimated average active-core power: ${energy !== null && modelDuration ? number(energy * 1e-6 / modelDuration) + ' µW' : 'unavailable'}`));
+  const source = override ? 'Local override; derived values only' : 'Recorded: ' + (profile.model?.source || 'no electrical assumptions');
+  $('model-status').textContent = `${source}. ${derived.cycles === null ? 'Throughput is missing: estimated cycles unavailable.' : `Throughput ${model.mips_per_mhz} MIPS/MHz.`} ${derived.energy === null ? 'Electrical inputs are incomplete: energy unavailable.' : ''} ${modelDuration ? `User-supplied cumulative target duration ${modelDuration} s.` : 'No target duration: entries/s and average power unavailable.'}`;
+  $('profile-summary').replaceChildren(element('span', `Unattributed: ${count(r.unknown)} dispatches`), element('span', `Estimated cycles: ${number(derived.cycles)}`), element('span', `Estimated average active-core power: ${derived.power === null ? 'unavailable' : number(derived.power) + ' µW'}`));
   renderFunctions();
 }
 function compareRows(a, b, key) {
@@ -358,7 +394,7 @@ async function inspectRecord(seq, direction = 0) {
 function download(text, name, type) { const link = element('a'); link.href = URL.createObjectURL(new Blob([text], {type})); link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); }
 $('file').addEventListener('change', e => openFile(e.target.files[0]));
 $('session').addEventListener('change', changeSession); $('capture').addEventListener('change', changeCapture);
-$('columns').addEventListener('change', () => { columns = Number($('columns').value); start = Math.max(0, cursor - Math.floor(columns / 2)); loadView(); });
+$('columns').addEventListener('change', () => { columns = Number($('columns').value); $('pan').max = Math.max(0, (capture?.count || 0) - columns); start = Math.max(0, cursor - Math.floor(columns / 2)); scheduleView(); });
 $('pan').addEventListener('input', () => go(Number($('pan').value), true));
 $('jump-button').onclick = () => go(Number($('jump').value) - 1);
 $('jump').addEventListener('keydown', e => { if (e.key === 'Enter') go(Number(e.target.value) - 1); });
@@ -366,7 +402,7 @@ $('oldest').onclick = () => go(0, true); $('latest').onclick = () => go((capture
 $('page-back').onclick = () => go(Math.max(0, start - columns), true); $('page-forward').onclick = () => go(start + columns, true);
 $('previous-stop').onclick = () => { const p = capture?.stops.findLast(s => s.index < cursor); if (p) go(p.index); };
 $('next-stop').onclick = () => { const p = capture?.stops.find(s => s.index > cursor); if (p) go(p.index); };
-$('lanes').addEventListener('click', e => { if (!view) return; const rect = e.target.getBoundingClientRect(), x = e.clientX - rect.left; if (x >= LABEL_WIDTH) go(start + Math.min(view.samples.length - 1, Math.floor((x - LABEL_WIDTH) / (rect.width - LABEL_WIDTH - 12) * view.samples.length))); });
+$('lanes').addEventListener('click', e => { if (!view) return; const rect = e.target.getBoundingClientRect(), x = e.clientX - rect.left; if (x >= LABEL_WIDTH) go(view.start + Math.min(view.samples.length - 1, Math.floor((x - LABEL_WIDTH) / (rect.width - LABEL_WIDTH - 12) * view.samples.length))); });
 $('lanes').addEventListener('keydown', e => {
   const moves = {ArrowRight: cursor + 1, ArrowLeft: cursor - 1, Home: 0, End: (capture?.count || 1) - 1, PageDown: cursor + columns, PageUp: cursor - columns};
   if (e.key in moves) { e.preventDefault(); go(moves[e.key]); }
@@ -382,9 +418,9 @@ $('sort').onchange = () => { functionPage = 0; renderFunctions(); };
 $('functions-back').onclick = () => { functionPage--; renderFunctions(); }; $('functions-forward').onclick = () => { functionPage++; renderFunctions(); };
 $('apply-model').onclick = () => {
   const values = ['current', 'throughput', 'voltage'].map(id => $(id).value.trim());
-  const model = {ua_per_mhz: Number(values[0]), mips_per_mhz: Number(values[1]), voltage: Number(values[2])};
+  const model = {ua_per_mhz: values[0] ? Number(values[0]) : null, mips_per_mhz: values[1] ? Number(values[1]) : null, voltage: values[2] ? Number(values[2]) : null};
   const duration = $('duration').value.trim();
-  if ((values.some(Boolean) && !M.positiveModel(model)) || (duration && (!Number.isFinite(Number(duration)) || Number(duration) <= 0))) { $('model-status').textContent = 'Enter all three positive finite model values, or leave all three blank. Duration must be positive if supplied.'; return; }
+  if (values.some(v => v && (!Number.isFinite(Number(v)) || Number(v) <= 0)) || (duration && (!Number.isFinite(Number(duration)) || Number(duration) <= 0))) { $('model-status').textContent = 'Each supplied assumption must be positive and finite. Throughput alone enables cycles; current and voltage add energy. Duration must be positive if supplied.'; return; }
   override = true; localModel = values.some(Boolean) ? model : null; modelDuration = duration ? Number(duration) : null; renderProfile();
 };
 $('reset-model').onclick = () => { override = false; localModel = null; modelDuration = null; $('duration').value = ''; loadProfile(); };
@@ -403,5 +439,23 @@ $('record-next').onclick = () => inspectRecord($('record-seq').value, 1);
 $('record-download').onclick = () => { if (rawRecord) download(rawText + '\n', `dbg3k-record-${rawRecord.seq}.json`, 'application/json'); };
 $('record-seq').addEventListener('keydown', e => { if (e.key === 'Enter') inspectRecord(e.target.value); });
 for (const button of document.querySelectorAll('[data-tab]')) button.onclick = () => tab(button.dataset.tab);
-$('theme').onclick = () => { document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'; requestAnimationFrame(drawTimeline); };
+$('theme').onclick = () => { document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'; palette.clear(); requestAnimationFrame(drawTimeline); };
 new ResizeObserver(() => { if (!$('timeline').hidden) drawTimeline(); }).observe($('timeline'));
+
+$('configure-estimates').onclick = () => {
+  tab('profiling');
+  $('model-editor').open = true;
+  const model = override ? localModel : profile?.model;
+  const target = !model?.mips_per_mhz ? 'throughput' : !model?.ua_per_mhz ? 'current' : !model?.voltage ? 'voltage' : 'duration';
+  $(target).focus();
+};
+$('lanes').addEventListener('wheel', event => {
+  if (!capture?.count || (!event.shiftKey && Math.abs(event.deltaX) <= Math.abs(event.deltaY))) return;
+  const delta = event.shiftKey ? event.deltaY || event.deltaX : event.deltaX;
+  const pixels = delta * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? $('lanes').clientWidth : 1);
+  const cell = Math.max(1, ($('lanes').clientWidth - LABEL_WIDTH - 12) / Math.min(columns, capture.count));
+  wheelRemainder += pixels / cell;
+  const step = Math.trunc(wheelRemainder);
+  if (step) { wheelRemainder -= step; go(start + step, true); }
+  event.preventDefault();
+}, {passive: false});
