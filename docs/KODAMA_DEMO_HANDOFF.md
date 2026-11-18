@@ -389,6 +389,66 @@ They are not silicon cycles, retired-instruction guarantees, per-coroutine total
 CPU occupancy or measured power. Shared adapter/core functions aggregate work
 from multiple tasks. The plugin histogram does not supply per-task causal traces.
 
+### Explain the ranking columns
+
+For the presentation, introduce the view with:
+
+> “This view shows where the observed instruction work goes over the whole QEMU
+> run. We can distinguish a small operation executed frequently from a larger
+> amount of work per entry. These are guest instruction counts, not MCU cycles.”
+
+Dynamic counters accumulate **since QEMU launch**, including startup and interrupt
+handlers. They do not reset at each breakpoint or describe only the current call.
+Instructions are attributed to the compiler-emitted body containing their PC;
+called functions receive their own counts separately.
+
+| Column | What to tell the audience |
+| --- | --- |
+| **Function** | Compiler-emitted function body. Names that alias the same body share one row. |
+| **Dispatches** | Guest instructions dispatched inside that body. This excludes instructions charged to its callees. |
+| **Calls†** | Times execution reached the body's entry instruction. A call-count proxy, not exact invocations or calls per second. |
+| **Code B** | Bytes occupied by the emitted body. This is code footprint, separate from shared stack or coroutine-frame storage. |
+| **Instr/entry** | `Dispatches / Calls†`: average instructions in the body per observed entry, not total work including callees. |
+| **Instr/B** | `Dispatches / Code B`: execution activity relative to code footprint. A small hot loop can score highly. |
+| **Share %** | The body's dispatches divided by all recorded run dispatches, multiplied by 100. |
+| **Cumul %** | Running sum of instruction shares down the current table order. Sort by descending dispatches to show the leading contributors together. |
+
+**Worked example (illustrative, not a captured result):** a body with 12,000
+Dispatches, 100 Calls† and 80 Code B has `Instr/entry = 120` and `Instr/B = 150`.
+If the whole run has 100,000 dispatches, its Share is 12%. If preceding rows account
+for 30%, its Cumul value is 42%.
+
+A short live walkthrough:
+
+1. Sort **Dispatches** descending. Point to the leading bars, then scroll the
+   table. The chart shows the top eight plus the currently stopped function;
+   the table contains all emitted bodies. Cumul shows how many leading bodies
+   account for a chosen fraction of the observed instruction work.
+2. Compare **Calls†** with **Instr/entry**. Many entries with little work per
+   entry identify frequent small operations; fewer entries with more work per
+   entry identify larger processing segments. Different paths and inputs can
+   change these ratios, so a high value alone does not establish inefficiency.
+3. For Kodama, point out that a coroutine resume body can be entered repeatedly
+   during **one task lifetime**. Its entry count is not the number of task
+   instances spawned. Use task generation and pool ownership to discuss lifetime.
+
+`▶` marks the current stopped body (last stopped while running); `▸` marks a body
+selected through another stack frame. `—` means unavailable, such as an average
+with no observed entry; it does not mean zero. Tail entries, jumps and loops back
+to the entry address can affect Calls†. Optimized/inlined functions may share a
+containing emitted body rather than appear as independent source functions.
+
+Share and Cumul include **unattributed dispatches in their denominator**. Those
+instructions remain in the run's unknown bucket, so the listed rows may total
+less than 100%. Cumul always follows instruction shares in the current table
+order, even when the rows are sorted by code size or another metric.
+
+The energy ranking adds **Energy pJ** and **Charge pC**, derived from the explicit
+current/throughput/voltage model. A common per-instruction factor makes its energy
+order match instruction order. These are active-core estimates, not measured
+power. Average power additionally requires target duration. QEMU dispatches are
+not silicon cycles or a guarantee that each instruction retired successfully.
+
 ### Confirm that this run's plugin is actually feeding dbg3k
 
 Set `RUN_DIR` to the launcher's printed absolute directory, then in a separate

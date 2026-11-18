@@ -3,11 +3,23 @@
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/browser-history-inspector` (based on PR #17)
 **Review:** draft https://github.com/tumblewhead/dbg3k/pull/18, stacked on PR #17
-**Current stage:** Browser feedback fixed locally:side-by-side pool/lanes,smoother navigation,visible cycle/power estimates;106 checks94 pass12 skip,Chromium pass. Published code4270b86;Kodama pin updated in PR4.
+**Current stage:** Presenter column explanation added to demo/operator guide;worked example,links and printable HTML checked;106 tests94 pass12 skip.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
+
+### 2026-11-17: presenter reference for run-statistics columns
+
+User requests the column explanation in demo documentation. Added matching
+presenter sections to docs/KODAMA_DEMO_HANDOFF.md and Kodama root DEMO.md:
+spoken introduction,eight-column table,12,000/100/80 example,live sorting steps,
+coroutine entry-vs-lifetime warning,current/selected markers,unknown denominator,
+missing averages and energy/charge/cycle qualification. Experiment guide links
+back to the root section. Rebuilt local printable build/kodama-demo-handoff.html.
+Sections match;13 local links and11 HTML anchors checked;example ratios verified.
+106 tests94 pass12 skips in23.681s;compileall/whitespace pass. Documentation only;
+no target/browser runtime changes or QEMU rerun. Publish on existing PR18/PR4.
 
 ### 2026-11-17: browser layout, navigation and estimate discoverability
 
