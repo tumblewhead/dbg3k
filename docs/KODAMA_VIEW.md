@@ -136,6 +136,10 @@ per-task stacks; the shared MSP stack remains in existing stack views.
 
 ## Save and replay a lesson
 
+For full-file browsing beyond the live512-sample window, use the
+[browser history inspector](BROWSER_HISTORY.md). It opens the existing JSONL
+locally and includes recorded instruction, entry-hit, stack and energy data.
+
 Raw records append to the existing dbg3k-history/ELF_YYYY-MM-DD.jsonl. Setup shows
 the absolute path; --history-dir still changes it. Values stay local. Existing
 session/hash/error/write-failure behavior remains.

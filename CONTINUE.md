@@ -1,13 +1,88 @@
 # dbg3k: development history and continuation
 
 **Repository:** https://github.com/tumblewhead/dbg3k
-**Working branch:** `feature/kodama-demo-handoff` (based on PR #16)
-**Review:** draft https://github.com/tumblewhead/dbg3k/pull/17, stacked on PR #16
-**Current stage:** Complete demo operator guide, printable HTML and plugin-enabled paired launcher.103 tests:92 pass/11 opt-in skips; real workshop/plugin checks pass; compileall/whitespace pass.
+**Working branch:** `feature/browser-history-inspector` (based on PR #17)
+**Review:** draft https://github.com/tumblewhead/dbg3k/pull/18, stacked on PR #17
+**Current stage:** Presenter column explanation added to demo/operator guide;worked example,links and printable HTML checked;106 tests94 pass12 skip.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
 
 ## Chronological development record
+
+### 2026-11-17: presenter reference for run-statistics columns
+
+User requests the column explanation in demo documentation. Added matching
+presenter sections to docs/KODAMA_DEMO_HANDOFF.md and Kodama root DEMO.md:
+spoken introduction,eight-column table,12,000/100/80 example,live sorting steps,
+coroutine entry-vs-lifetime warning,current/selected markers,unknown denominator,
+missing averages and energy/charge/cycle qualification. Experiment guide links
+back to the root section. Rebuilt local printable build/kodama-demo-handoff.html.
+Sections match;13 local links and11 HTML anchors checked;example ratios verified.
+106 tests94 pass12 skips in23.681s;compileall/whitespace pass. Documentation only;
+no target/browser runtime changes or QEMU rerun. Publish on existing PR18/PR4.
+
+### 2026-11-17: browser layout, navigation and estimate discoverability
+
+User cannot see pool with lanes, finds scrolling rough and cannot find cycle/power
+info. Moved pool into sticky desktop sidebar beside lanes;both panes scroll
+independently and narrow screens stack. Added top-level estimated cycles/power
+cards and Configure estimates focusing the missing input. Missing profile records
+explicitly explain counting-plugin capture;no measurements are fabricated.
+Throughput-only local input now enables cycles;current/voltage add charge/energy,
+target duration adds average power. A new cumulative snapshot clears duration.
+
+Viewport requests coalesce per animation frame with one in flight/latest pending.
+A bounded LRU caches1024 parsed records or16MiB source bytes;one-sample pan of32
+columns reads only1 new record. Cached theme colors avoid per-cell style reads.
+Horizontal trackpad/Shift-wheel pan;end windows keep column width constant.
+106 ordinary checks94 pass12 skips in23.795s;index/model tests pass. Chromium
+passes in4.088s:side-by-side viewport assertions,real wheel,31 rapid inputs,
+partial/complete/no-profile estimates,snapshot/session isolation and real Kodama
+recording. Dark/light/narrow screenshots inspected. Initial test polling violated
+CSP;locator polling fixes test without weakening policy. No target/MI/plugin/schema
+change or new QEMU run;previous real capture replayed. Mac/frame-rate unqualified.
+Receipt:handoff/browser-feedback-validation.json. Published PR18 source
+4270b8695caa115364bdc160c497e04e2c193479;CI44230651365 running. Kodama PR4
+source d03a868e5310a35abbb5c71416625afcfccbae3f pins it. Next:check CI;user pulls
+same demo/browser-history-001,updates submodules and refreshes browser.
+
+### 2026-11-17: local browser inspector for the complete recorded history
+
+User wants dbg3k capture -> choose JSONL in browser -> full task/signal/pool and
+profiling inspection. Added stdlib loopback fixed-asset server, pure JS domain
+model, streaming worker byte index and responsive dark/light canvas frontend.
+No GDB/QEMU/ELF required to inspect; selected files stay in browser. All accepted
+samples remain selectable by session/capture beyond512 live retention, with
+whole-capture overview, page/stop/zoom/jump/keyboard navigation and explicit gaps.
+Pool ownership is validated; task identities include generation/regression epoch.
+
+Profiling keeps cumulative QEMU snapshots separate, validates totals/build and
+retains exact wide counters. Rankings include entry-hit proxies/frequency ratios,
+code bytes, instruction density, modeled cycles/charge/energy and average power
+only with explicit target duration. No silicon-cycle/physical-power claims.
+Recorded models stay session-local; overrides remain derived browser state.
+Stacks/memory/typed watches/returns/raw records are inspectable by journal seq.
+Exact raw downloads preserve original numeric tokens. Added128-body code_catalog
+chunks to existing trace.v1 so new files carry names/aliases/sizes without ELF;
+older files work with body keys. No target calls or collector-budget changes.
+
+106 ordinary checks:94 pass12 opt-in skips in24.093s. Native index/server tests
+include6201 synthetic samples; real Chromium file/UI/export/privacy flow passes
+in3.615s with zero JS errors/dialogs and only local GET assets. Dark/light/narrow
+screens inspected. Independent actual Kodama/QEMU/plugin test passes in8.998s,
+including complete matching-hash catalog and populated rankings/observations/API.
+Wheel contains all5 assets/new entry point; compileall/whitespace pass. Separate
+synthetic and actual evidence; native Mac/Safari and million-sample benchmark
+unqualified. Receipt:handoff/browser-history-validation.json. Retained failures:
+initial pip sandbox DNS;venv missing build backend corrected using system build;
+doc patch heading corrected. User history directories untouched.
+
+Start: python -m dbg3k.history_browser -> http://127.0.0.1:8767 -> Open JSONL.
+Guide:docs/BROWSER_HISTORY.md. Published PR18; validated source dcc21bac31ca7fb373c895b472fc91136bef8b56.
+CI44227217932 unit/browser jobs pass;QEMU job still running. Kodama
+demo/browser-history-001 pins this source in draft PR4, code/docs source
+5d9192231b8f2207b35e974cbeb065a205080b0b. Next:review both PRs/check remaining
+CI and try the standard-library viewer command on the remote Mac.
 
 ### 2026-11-17: operator handoff and plugin-enabled demo launch
 

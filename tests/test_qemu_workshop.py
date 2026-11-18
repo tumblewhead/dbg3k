@@ -93,6 +93,13 @@ class WorkshopQemuTests(unittest.IsolatedAsyncioTestCase):
                         profile = json.loads(Path(option('--instruction-profile')).read_text())
                         self.assertEqual(profile['elf_sha256'], app.catalog.sha256)
                         records = [json.loads(line) for line in app._trace.path.read_bytes().splitlines()]
+                        chunks = [r for r in records if r['kind'] == 'code_catalog']
+                        self.assertTrue(chunks)
+                        self.assertEqual({r['elf_sha256'] for r in chunks}, {app.catalog.sha256})
+                        self.assertEqual(len(chunks), chunks[0]['chunk_count'])
+                        self.assertTrue(all(len(r['functions']) <= 128 for r in chunks))
+                        self.assertEqual({f['key'] for r in chunks for f in r['functions']},
+                                         {f.key for f in app.catalog.functions})
                         self.assertTrue(any(r['kind'] == 'observation' and r.get('status') == 'ok' for r in records))
                         receipt = os.environ.get('DBG3K_WORKSHOP_RECEIPT')
                         if receipt:

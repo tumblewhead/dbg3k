@@ -914,6 +914,18 @@ class DebuggerApp(App):
                                               elf_sha256=self.catalog.sha256 if self.catalog else None,
                                               build_id=getattr(self.catalog, 'build_id', None))
                     self._log(f'JSONL recording: {self._trace.path}')
+                    if self.catalog:
+                        # Offline readers need emitted-body identities without
+                        # access to the original ELF or source checkout.
+                        functions = self.catalog.functions
+                        for offset in range(0, len(functions), 128):
+                            self._trace_record('code_catalog', catalog_version=1,
+                                elf_sha256=self.catalog.sha256, machine=self.catalog.machine,
+                                chunk_index=offset // 128, chunk_count=(len(functions) + 127) // 128,
+                                functions=[dict(key=f.key, section=f.section, start=hex(f.start),
+                                                size=f.size, names=list(f.names))
+                                           for f in functions[offset:offset + 128]],
+                                origin='elf-symbol-table')
                     initial = self._stop_payload or record.payload
                     self._trace_record('stop', stop=self.model.stop, reason=initial.get('reason', 'attached'),
                                        thread=initial.get('thread-id'), frame=initial.get('frame'),
