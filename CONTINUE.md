@@ -2,7 +2,7 @@
 
 **Repository:** https://github.com/tumblewhead/dbg3k
 **Working branch:** `feature/browser-history-inspector` (based on PR #17)
-**Review:** browser history draft pending, stacked on PR #17
+**Review:** draft https://github.com/tumblewhead/dbg3k/pull/18, stacked on PR #17
 **Current stage:** Browser JSONL inspector local-pass:106 checks94 pass12 skips; real Chromium and Kodama/QEMU/catalog/plugin checks pass. Publication next.
 
 > **Handoff protocol:** Read this file first, followed by `AGENTS.md`, `docs/DESIGN.md`, `docs/CONVERSATION_NOTES.md`, `README.md`, and `handoff/CONTINUE.json`. The GitHub repo is canonical. Update this human-readable journal and the JSON checkpoint after meaningful work, and leave the next exact action for a new agent.
@@ -41,8 +41,11 @@ initial pip sandbox DNS;venv missing build backend corrected using system build;
 doc patch heading corrected. User history directories untouched.
 
 Start: python -m dbg3k.history_browser -> http://127.0.0.1:8767 -> Open JSONL.
-Guide:docs/BROWSER_HISTORY.md. Next: publish review and update clean Kodama demo's
-pinned submodule/guide on demo/browser-history-001;check CI.
+Guide:docs/BROWSER_HISTORY.md. Published PR18; validated source dcc21bac31ca7fb373c895b472fc91136bef8b56.
+CI44227217932 unit/browser jobs pass;QEMU job still running. Kodama
+demo/browser-history-001 pins this source in draft PR4, code/docs source
+5d9192231b8f2207b35e974cbeb065a205080b0b. Next:review both PRs/check remaining
+CI and try the standard-library viewer command on the remote Mac.
 
 ### 2026-11-17: operator handoff and plugin-enabled demo launch
 
